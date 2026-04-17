@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.brantz.pierre.OrvalMaps",
       "config": {
-        "googleMapsApiKey": "AIzaSyBxHHGrAjEJQ3ViA7WtjsSBYOkzzw7BwFg"
+        "googleMapsApiKey": "GOOGLE_MAPS_API_KEY"
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Orval Maps a besoin de votre position pour afficher les cafés autour de vous.",
@@ -32,7 +32,7 @@
       "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyBxHHGrAjEJQ3ViA7WtjsSBYOkzzw7BwFg"
+          "apiKey": "GOOGLE_MAPS_API_KEY"
         }
       },
       "edgeToEdgeEnabled": true,
