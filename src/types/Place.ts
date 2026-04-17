@@ -7,4 +7,13 @@ export interface Place {
   city?: string;
   ownerUsername?: string;
   imageUrl?: string;
+  price?: number; // Ajout du prix de l'Orval
+  verificationCount?: number;
+  lastVerificationDate?: string;
+}
+
+export interface PlaceRequest extends Omit<Place, 'id'> {
+  id?: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requesterUsername?: string;
 }

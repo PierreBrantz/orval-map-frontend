@@ -4,9 +4,7 @@ export const useLoginUser = () => {
   const { login } = useAuth();
 
   const loginUser = async (baseUrl: string | null, username: string, password: string) => {
-    if (!baseUrl) {
-      throw new Error("Impossible de se connecter : URL du serveur inconnue.");
-    }
+    if (!baseUrl) throw new Error("URL du serveur inconnue.");
 
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/auth/login`, {
       method: "POST",
@@ -22,9 +20,32 @@ export const useLoginUser = () => {
     const data = await response.json();
     if (!data.token) throw new Error("Token manquant dans la réponse");
 
-    await login(data.token); // stocke le token dans AsyncStorage et context
+    await login(data.token);
     return data;
   };
 
-  return { loginUser };
+  /** 🚀 Nouvel appel pour créer un compte */
+  const registerUser = async (baseUrl: string | null, username: string, password: string) => {
+    if (!baseUrl) throw new Error("URL du serveur inconnue.");
+
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erreur inscription (${response.status})`);
+    }
+
+    // Après l'inscription, on connecte automatiquement l'utilisateur
+    const data = await response.json();
+    if (data.token) {
+      await login(data.token);
+    }
+    return data;
+  };
+
+  return { loginUser, registerUser };
 };

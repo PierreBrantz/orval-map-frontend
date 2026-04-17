@@ -13,7 +13,16 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.brantz.pierre.OrvalMaps",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBxHHGrAjEJQ3ViA7WtjsSBYOkzzw7BwFg"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Orval Maps a besoin de votre position pour afficher les cafés autour de vous.",
+        "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à vos photos pour uploader l'image d'un café.",
+        "NSCameraUsageDescription": "L'application a besoin de la caméra pour prendre une photo du café."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,14 +32,19 @@
       "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyBkCEvpALa-hZwLmgkIikYHYKcd_poMEoM"
+          "apiKey": "AIzaSyBxHHGrAjEJQ3ViA7WtjsSBYOkzzw7BwFg"
         }
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.brantz.pierre.OrvalMaps"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "05e5cfef-83fd-4db5-a354-46790ee4b3b8"
+      }
     }
   }
 }

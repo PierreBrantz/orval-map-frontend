@@ -11,6 +11,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "axios": "^1.13.2",
+    "eas-cli": "^18.3.0",
     "expo": "~54.0.13",
     "expo-image-picker": "^17.0.8",
     "expo-location": "~19.0.8",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "baseline-browser-mapping": "^2.10.13",
     "typescript": "~5.9.2"
   },
   "private": true

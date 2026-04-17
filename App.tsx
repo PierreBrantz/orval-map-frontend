@@ -1,14 +1,15 @@
 // App.tsx
-import React from "react";
-import { ActivityIndicator, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, View, Modal } from "react-native";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import LoginScreen from "./src/screens/LoginScreen";
+import RegisterScreen from "./src/screens/RegisterScreen";
 import MapScreen from "./src/screens/MapScreen";
 
 function AppContent() {
-  const { token, isLoading, isGuest } = useAuth();
+  const { isLoading, isLoginVisible } = useAuth();
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
-  // 1. Affiche un écran de chargement pendant la vérification du token
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -17,8 +18,19 @@ function AppContent() {
     );
   }
 
-  // 2. Affiche la carte si connecté OU invité, sinon l'écran de connexion
-  return (token || isGuest) ? <MapScreen /> : <LoginScreen />;
+  return (
+    <>
+      <MapScreen />
+
+      <Modal visible={isLoginVisible} animationType="slide">
+        {authMode === 'login' ? (
+          <LoginScreen onSwitchToRegister={() => setAuthMode('register')} />
+        ) : (
+          <RegisterScreen onSwitchToLogin={() => setAuthMode('login')} />
+        )}
+      </Modal>
+    </>
+  );
 }
 
 export default function App() {
