@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LOCAL_DEV_IP, DEV_PORT, PROD_BASE, DEV_BASE } from "../config";
 
 const CACHE_KEY = "orval_api_baseurl_cache_v1";
-const TIMEOUT_MS = 1500;
+const TIMEOUT_MS = 2500; // Augmenté pour laisser le temps à Railway de "se réveiller"
 
 async function fetchWithTimeout(url: string, timeout = TIMEOUT_MS) {
   const controller = new AbortController();
@@ -14,8 +14,9 @@ async function fetchWithTimeout(url: string, timeout = TIMEOUT_MS) {
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(id);
     return res;
-  } finally {
+  } catch (e) {
     clearTimeout(id);
+    throw e;
   }
 }
 
@@ -24,16 +25,9 @@ type UseApiResult = {
   loading: boolean;
   error: string | null;
   clearCache: () => Promise<void>;
-  forceBaseUrl: (url: string) => Promise<void>;
 };
 
-export function useApiBaseUrl({
-  overrideCandidates,
-  pingPath = "/api/places",
-}: {
-  overrideCandidates?: string[];
-  pingPath?: string;
-} = {}): UseApiResult {
+export function useApiBaseUrl(): UseApiResult {
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,85 +37,38 @@ export function useApiBaseUrl({
     mounted.current = true;
     (async () => {
       setLoading(true);
-      setError(null);
 
-      // 🚀 MODE PRODUCTION (Release APK)
-      // Si on n'est PAS en mode __DEV__, on utilise TOUJOURS la PROD sans scanner le réseau local.
+      // 1. Priorité absolue à la PROD si on n'est pas en mode développement Expo
       if (!__DEV__) {
-        console.log("🚀 PRODUCTION : Utilisation de " + PROD_BASE);
         setBaseUrl(PROD_BASE);
         setLoading(false);
         return;
       }
 
-      // 🛠️ MODE DÉVELOPPEMENT (Local)
-      console.log("🛠️ DÉVELOPPEMENT : Tentative de connexion locale à " + DEV_BASE);
-
+      // 2. En mode DEV, on tente d'abord le local
       try {
-        const pingUrl = DEV_BASE.replace(/\/$/, "") + (pingPath.startsWith("/") ? "" : "/") + pingPath;
-        const res = await fetchWithTimeout(pingUrl, 2000);
-        if (res && res.ok) {
+        const res = await fetchWithTimeout(`${DEV_BASE}/api/places`, 1500);
+        if (res.ok) {
           setBaseUrl(DEV_BASE);
           setLoading(false);
           return;
         }
       } catch (e) {
-        console.warn("❌ Échec de connexion locale à " + DEV_BASE);
+        // Échec local, c'est normal si le PC est éteint
       }
 
-      // Fallback sur d'autres IPs locales possibles si DEV_BASE échoue
-      const candidates: string[] = [];
-      if (Platform.OS === "android") {
-        candidates.push(`http://10.0.2.2:${DEV_PORT}`);
-      } else {
-        candidates.push(`http://localhost:${DEV_PORT}`);
-      }
-      if (LOCAL_DEV_IP) candidates.push(`http://${LOCAL_DEV_IP}:${DEV_PORT}`);
-
-      let found: string | null = null;
-      for (const c of candidates) {
-        try {
-          const url = c.replace(/\/$/, "") + (pingPath.startsWith("/") ? "" : "/") + pingPath;
-          const res = await fetchWithTimeout(url, TIMEOUT_MS);
-          if (res && res.ok) {
-            found = c;
-            break;
-          }
-        } catch (e) {}
-      }
-
-      if (mounted.current) {
-        // En mode DEV, si on ne trouve rien localement, on peut quand même tenter la PROD
-        setBaseUrl(found || PROD_BASE);
-        setLoading(false);
-      }
+      // 3. Fallback sur Railway si le local ne répond pas
+      setBaseUrl(PROD_BASE);
+      setLoading(false);
     })();
 
     return () => { mounted.current = false; };
-  }, [overrideCandidates, pingPath]);
+  }, []);
 
   const clearCache = async () => {
-    try {
-      await AsyncStorage.removeItem(CACHE_KEY);
-      setBaseUrl(null);
-    } catch (e) {}
+    await AsyncStorage.removeItem(CACHE_KEY);
+    setBaseUrl(null);
   };
 
-  const forceBaseUrl = async (url: string) => {
-    try {
-      const pingUrl = url.replace(/\/$/, "") + "/api/places";
-      const r = await fetchWithTimeout(pingUrl, TIMEOUT_MS);
-      if (r && r.ok) {
-        await AsyncStorage.setItem(CACHE_KEY, url);
-        setBaseUrl(url);
-        setError(null);
-      } else {
-        setError("L'URL fournie n'a pas répondu.");
-      }
-    } catch (e) {
-      setError("Erreur lors du test de l'URL.");
-    }
-  };
-
-  return { baseUrl, loading, error, clearCache, forceBaseUrl };
+  return { baseUrl, loading, error, clearCache };
 }

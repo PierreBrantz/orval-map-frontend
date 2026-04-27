@@ -26,20 +26,29 @@ async function authorizedFetch(input: RequestInfo, init: RequestInit = {}) {
   return fetch(input, { ...init, headers });
 }
 
-export async function fetchPlaces(baseUrl: string, page = 0, size = 20): Promise<Place[]> {
+/** Vider le cache des lieux */
+export async function clearPlacesCache() {
+  await AsyncStorage.removeItem(CACHE_KEY);
+}
+
+export async function fetchPlaces(baseUrl: string, page = 0, size = 100, forceRefresh = false): Promise<Place[]> {
   if (!baseUrl) throw new Error("baseUrl required");
-  if (page === 0) {
+
+  if (page === 0 && !forceRefresh) {
     const cached = await AsyncStorage.getItem(CACHE_KEY);
     if (cached) {
       const parsed: CachedPlaces = JSON.parse(cached);
       if (Date.now() - parsed.timestamp < CACHE_TTL_MS) return parsed.data;
     }
   }
+
   const url = `${baseUrl.replace(/\/$/, "")}/api/places?page=${page}&size=${size}`;
   const res = await authorizedFetch(url);
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
+
   const responseJson: PagedResponse<Place> = await res.json();
   const data = responseJson.content || [];
+
   if (page === 0) {
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
   }
@@ -47,7 +56,6 @@ export async function fetchPlaces(baseUrl: string, page = 0, size = 20): Promise
 }
 
 export async function uploadImage(baseUrl: string, placeId: string | number, localUri: string): Promise<string> {
-  // placeId peut être "request" si c'est une demande et non un lieu existant
   const endpoint = `${baseUrl}/api/places/${placeId}/upload-image`;
   const formData = new FormData();
   const filename = localUri.split('/').pop() || 'photo.jpg';
@@ -60,7 +68,6 @@ export async function uploadImage(baseUrl: string, placeId: string | number, loc
   return responseData.url;
 }
 
-/** 🚀 Nouvel appel pour suggérer un lieu (accessible à tous) */
 export async function suggestPlace(baseUrl: string, request: Omit<PlaceRequest, 'status'>): Promise<PlaceRequest> {
   const res = await authorizedFetch(`${baseUrl}/api/place-requests`, {
     method: "POST",
@@ -71,19 +78,18 @@ export async function suggestPlace(baseUrl: string, request: Omit<PlaceRequest, 
   return res.json();
 }
 
-/** 👑 Nouvel appel pour récupérer les demandes (Admin) */
 export async function fetchPlaceRequests(baseUrl: string): Promise<PlaceRequest[]> {
   const res = await authorizedFetch(`${baseUrl}/api/place-requests/pending`);
   if (!res.ok) throw new Error(`Erreur admin: ${res.status}`);
   return res.json();
 }
 
-/** 👑 Nouvel appel pour valider une demande (Admin) */
 export async function validatePlaceRequest(baseUrl: string, id: number, approve: boolean): Promise<void> {
   const res = await authorizedFetch(`${baseUrl}/api/place-requests/${id}/validate?approve=${approve}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(`Erreur validation: ${res.status}`);
+  await clearPlacesCache(); // Purge cache après validation
 }
 
 export async function updatePlace(baseUrl: string, place: Place): Promise<Place> {
@@ -93,6 +99,7 @@ export async function updatePlace(baseUrl: string, place: Place): Promise<Place>
     body: JSON.stringify(place),
   });
   if (!res.ok) throw new Error(`Update Error: ${res.status}`);
+  await clearPlacesCache(); // Purge cache après modification
   return res.json();
 }
 
@@ -101,15 +108,6 @@ export async function verifyPlace(baseUrl: string, placeId: number): Promise<Pla
     method: "POST",
   });
   if (!res.ok) throw new Error(`Verify Error: ${res.status}`);
-  return res.json();
-}
-
-export async function addPlace(baseUrl: string, place: Omit<Place, "id">): Promise<Place> {
-  const res = await authorizedFetch(`${baseUrl}/api/places`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(place),
-  });
-  if (!res.ok) throw new Error(`Add Error: ${res.status}`);
+  await clearPlacesCache(); // Purge cache après vérification
   return res.json();
 }

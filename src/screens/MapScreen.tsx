@@ -163,25 +163,39 @@ export default function MapScreen() {
     if (!baseUrl) return;
     try {
       setIsUploading(true);
+
       let finalImageUrl = editingPlace.imageUrl;
       if (editingPlace.imageUrl && editingPlace.imageUrl.startsWith('file://')) {
         finalImageUrl = await uploadImage(baseUrl, editingPlace.id || "request", editingPlace.imageUrl);
       }
 
       if (editingPlace.id) {
+        // Mise à jour d'un lieu existant
         const saved = await updatePlace(baseUrl, { ...editingPlace, imageUrl: finalImageUrl } as Place);
         setPlaces(prev => prev.map(p => p.id === saved.id ? saved : p));
         setSelectedPlace(saved);
         Alert.alert("Succès", "Lieu mis à jour !");
       } else {
+        // Suggestion d'un nouveau lieu -> On récupère la position GPS réelle PRÉCISE
+        let currentLat = region?.latitude || 0;
+        let currentLng = region?.longitude || 0;
+
+        try {
+          const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          currentLat = location.coords.latitude;
+          currentLng = location.coords.longitude;
+        } catch (err) {
+          console.warn("Impossible de récupérer la position précise, utilisation du centre de la carte.");
+        }
+
         const payload = {
           ...editingPlace,
           imageUrl: finalImageUrl,
-          lat: editingPlace.lat || region?.latitude || 0,
-          lng: editingPlace.lng || region?.longitude || 0
+          lat: currentLat,
+          lng: currentLng
         };
         await suggestPlace(baseUrl, payload as any);
-        Alert.alert("Merci !", "Votre suggestion a été envoyée à l'admin.");
+        Alert.alert("Merci !", "Votre suggestion a été envoyée à l'admin avec votre position GPS précise.");
       }
       setIsModalVisible(false);
     } catch (e: any) {
@@ -194,7 +208,14 @@ export default function MapScreen() {
   const handleVerify = async () => {
     if (!baseUrl || !selectedPlace) return;
     if (isGuest) {
-      showLogin();
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté pour confirmer la présence d'Orval dans cet établissement.",
+        [
+          { text: "Plus tard", style: "cancel" },
+          { text: "Se connecter", onPress: showLogin }
+        ]
+      );
       return;
     }
     try {
@@ -207,6 +228,22 @@ export default function MapScreen() {
       Alert.alert("Erreur", "Impossible de vérifier ce lieu.");
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleAddPlacePress = () => {
+    if (isGuest) {
+      Alert.alert(
+        "Connexion requise",
+        "Pour suggérer un nouveau café, vous devez d'abord créer un compte ou vous connecter.",
+        [
+          { text: "Plus tard", style: "cancel" },
+          { text: "Se connecter", onPress: showLogin }
+        ]
+      );
+    } else {
+      setEditingPlace({});
+      setIsModalVisible(true);
     }
   };
 
@@ -293,12 +330,10 @@ export default function MapScreen() {
         </TouchableOpacity>
       </SafeAreaView>
 
-      {/* FAB */}
-      {!isGuest && (
-        <TouchableOpacity style={styles.fab} onPress={() => { setEditingPlace({}); setIsModalVisible(true); }}>
-          <MaterialIcons name="add" size={32} color="white" />
-        </TouchableOpacity>
-      )}
+      {/* FAB (Visible pour tous) */}
+      <TouchableOpacity style={styles.fab} onPress={handleAddPlacePress}>
+        <MaterialIcons name="add" size={32} color="white" />
+      </TouchableOpacity>
 
       {/* INFO PANEL */}
       <Animated.View style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}>
@@ -413,7 +448,7 @@ export default function MapScreen() {
                 <View style={styles.infoBanner}>
                   <MaterialIcons name="gps-fixed" size={18} color="#ff8c00" />
                   <Text style={styles.infoBannerText}>
-                    Pour plus de précision, suggérez le café depuis l'établissement. Votre position GPS est jointe à l'envoi.
+                    L'application récupère votre position GPS précise au moment de l'envoi.
                   </Text>
                 </View>
               )}
