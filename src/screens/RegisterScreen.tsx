@@ -10,7 +10,8 @@ import {
   Alert,
   Keyboard,
   SafeAreaView,
-  ScrollView
+  ScrollView,
+  Linking // Import Linking
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useApiBaseUrl } from "../hooks/useApiBaseUrl";
@@ -59,6 +60,14 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
     } finally {
       setLoading(false);
     }
+  };
+
+  const openTerms = () => {
+    if (baseUrl) Linking.openURL(`${baseUrl.replace(/\/$/, "")}/terms.html`);
+  };
+
+  const openPrivacy = () => {
+    if (baseUrl) Linking.openURL(`${baseUrl.replace(/\/$/, "")}/privacy.html`);
   };
 
   return (
@@ -113,6 +122,21 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
 
           <Text style={styles.hintText}>Minimum 8 caractères et au moins 1 chiffre.</Text>
 
+          {/* Message d'âge légal */}
+          <Text style={styles.ageDisclaimerText}>
+            En créant un compte, vous confirmez avoir l'âge légal pour consommer de l'alcool dans votre pays.
+          </Text>
+
+          {/* Liens vers les documents légaux */}
+          <View style={styles.legalLinksContainer}>
+            <TouchableOpacity onPress={openTerms}>
+              <Text style={styles.legalLinkText}>Conditions d'utilisation</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={openPrivacy}>
+              <Text style={styles.legalLinkText}>Politique de confidentialité</Text>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleRegister}
@@ -150,6 +174,24 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 16, color: '#333' },
   eyeIcon: { padding: 5 },
   hintText: { fontSize: 12, color: '#bbb', marginBottom: 20, marginLeft: 5 },
+  ageDisclaimerText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    marginHorizontal: 10,
+  },
+  legalLinksContainer: { // Nouveau style pour le conteneur des liens légaux
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: -10, // Ajustement pour rapprocher du texte précédent
+    marginBottom: 20,
+  },
+  legalLinkText: { // Nouveau style pour le texte des liens légaux
+    color: '#ff8c00',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
   button: {
     backgroundColor: "#ff8c00",
     padding: 18,

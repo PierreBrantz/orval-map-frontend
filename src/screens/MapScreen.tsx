@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -23,15 +23,59 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage"; // Import AsyncStorage
 
-import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggestPlace, fetchPlaceRequests, validatePlaceRequest, verifyPlace } from "../api/places"; // ✅ Import verifyPlace
+import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggestPlace, fetchPlaceRequests, validatePlaceRequest, verifyPlace, deletePlace } from "../api/places";
 import { useApiBaseUrl } from "../hooks/useApiBaseUrl";
 import { useAuth } from "../context/AuthContext";
 import { Place, PlaceRequest } from "../types/Place";
 
+// Helper functions for AsyncStorage
+const VERIFICATION_STORAGE_KEY = "place_verification_timestamps";
+
+type VerificationTimestamps = {
+  [placeId: number]: number; // placeId -> timestamp of last verification
+};
+
+const getVerificationTimestamps = async (): Promise<VerificationTimestamps> => {
+  try {
+    const jsonValue = await AsyncStorage.getItem(VERIFICATION_STORAGE_KEY);
+    return jsonValue != null ? JSON.parse(jsonValue) : {};
+  } catch (e) {
+    console.error("Error reading verification timestamps from AsyncStorage", e);
+    return {};
+  }
+};
+
+const setVerificationTimestamp = async (placeId: number, timestamp: number) => {
+  try {
+    const existingTimestamps = await getVerificationTimestamps();
+    const updatedTimestamps = {
+      ...existingTimestamps,
+      [placeId]: timestamp,
+    };
+    const jsonValue = JSON.stringify(updatedTimestamps);
+    await AsyncStorage.setItem(VERIFICATION_STORAGE_KEY, jsonValue);
+  } catch (e) {
+    console.error("Error writing verification timestamp to AsyncStorage", e);
+  }
+};
+
+const isSameDay = (timestamp1: number, timestamp2: number): boolean => {
+  const date1 = new Date(timestamp1);
+  const date2 = new Date(timestamp2);
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
+
 export default function MapScreen() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [verifiedPlacesToday, setVerifiedPlacesToday] = useState<Set<number>>(new Set()); // New state to track today's verifications
 
   // Modals
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -68,9 +112,28 @@ export default function MapScreen() {
     return ownerName && ownerName.toLowerCase().trim() === username.toLowerCase().trim();
   };
 
+  // Load places and verification status on mount
   useEffect(() => {
     if (!baseUrl) return;
-    fetchPlaces(baseUrl).then(setPlaces).catch(err => console.error(err));
+    const loadData = async () => {
+      try {
+        const fetchedPlaces = await fetchPlaces(baseUrl);
+        setPlaces(fetchedPlaces);
+
+        const timestamps = await getVerificationTimestamps();
+        const today = Date.now();
+        const verifiedTodayIds = new Set<number>();
+        for (const placeId in timestamps) {
+          if (isSameDay(timestamps[placeId], today)) {
+            verifiedTodayIds.add(Number(placeId));
+          }
+        }
+        setVerifiedPlacesToday(verifiedTodayIds);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadData();
   }, [baseUrl, username]);
 
   useEffect(() => {
@@ -210,18 +273,55 @@ export default function MapScreen() {
     }
   };
 
-  // ✅ Nouvelle fonction pour vérifier un lieu
   const handleVerifyPlace = async (place: Place) => {
     if (!baseUrl || !place.id) return;
+
+    if (verifiedPlacesToday.has(place.id)) {
+      Alert.alert("Déjà vérifié", "Vous avez déjà vérifié ce lieu aujourd'hui. Revenez demain !");
+      return;
+    }
+
     try {
       const updatedPlace = await verifyPlace(baseUrl, place.id);
       setPlaces(prev => prev.map(p => p.id === updatedPlace.id ? updatedPlace : p));
       setSelectedPlace(updatedPlace); // Met à jour le panneau d'infos
       Alert.alert("Santé !", `Merci d'avoir confirmé que l'on sert toujours de l'Orval à ${place.name}.`);
+
+      // Record verification timestamp
+      await setVerificationTimestamp(place.id, Date.now());
+      setVerifiedPlacesToday(prev => new Set(prev).add(place.id!));
+
     } catch (e: any) {
       Alert.alert("Erreur", e.message || "Impossible de vérifier le lieu.");
     }
   };
+
+  const handleDeletePlace = async (placeId: number) => {
+    if (!baseUrl) return;
+    Alert.alert(
+      "Confirmation",
+      "Êtes-vous sûr de vouloir supprimer ce café ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deletePlace(baseUrl, placeId);
+              setPlaces(prev => prev.filter(p => p.id !== placeId));
+              setSelectedPlace(null);
+              Alert.alert("Succès", "Le café a été supprimé.");
+            } catch (e: any) {
+              Alert.alert("Erreur", e.message || "Impossible de supprimer le lieu.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isPlaceVerifiedToday = selectedPlace?.id ? verifiedPlacesToday.has(selectedPlace.id) : false;
 
   if (isLoadingLocation || !region) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#ff8c00" /></View>;
@@ -235,8 +335,8 @@ export default function MapScreen() {
         region={region}
         onRegionChangeComplete={setRegion}
         onPress={() => { setSelectedPlace(null); Keyboard.dismiss(); }}
-        showsUserLocation={true} // ✅ Réactivé
-        showsMyLocationButton={false} // 🎯 Supprimé la cible native
+        showsUserLocation={true}
+        showsMyLocationButton={false}
         toolbarEnabled={false}
       >
         {places.map((p) => (
@@ -319,14 +419,15 @@ export default function MapScreen() {
                 <Text style={styles.actionBtnText}>Y Aller</Text>
               </TouchableOpacity>
 
-              {/* ✅ Bouton Vérifier */}
+              {/* Bouton Vérifier */}
               {!isGuest && selectedPlace.id && (
-                <TouchableOpacity 
-                  style={[styles.editBtn, {backgroundColor: '#28a745'}]} 
+                <TouchableOpacity
+                  style={[styles.editBtn, {backgroundColor: isPlaceVerifiedToday ? '#cccccc' : '#28a745'}]}
                   onPress={() => handleVerifyPlace(selectedPlace)}
+                  disabled={isPlaceVerifiedToday}
                 >
-                  <Ionicons name="checkmark-shield" size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>Vérifier</Text>
+                  <Ionicons name="shield-checkmark-outline" size={18} color="white" style={{marginRight: 5}} />
+                  <Text style={styles.actionBtnText}>{isPlaceVerifiedToday ? "Vérifié aujourd'hui" : "Vérifier"}</Text>
                 </TouchableOpacity>
               )}
 
@@ -336,12 +437,23 @@ export default function MapScreen() {
                   <Text style={styles.actionBtnText}>Editer</Text>
                 </TouchableOpacity>
               )}
+
+              {/* Bouton Supprimer pour Admin */}
+              {isAdmin && selectedPlace.id && (
+                <TouchableOpacity
+                  style={[styles.editBtn, {backgroundColor: '#dc3545'}]}
+                  onPress={() => handleDeletePlace(selectedPlace.id!)}
+                >
+                  <Ionicons name="trash" size={18} color="white" style={{marginRight: 5}} />
+                  <Text style={styles.actionBtnText}>Supprimer</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.verificationContainer}>
                <Ionicons name="ribbon-outline" size={16} color="#666" />
                <Text style={styles.verificationText}>
-                 Vérifié {selectedPlace.verificationCount || 0} fois. 
+                 Vérifié {selectedPlace.verificationCount || 0} fois.
                  {selectedPlace.lastVerificationDate ? ` Dernièrement le ${new Date(selectedPlace.lastVerificationDate).toLocaleDateString()}` : " Jamais vérifié."}
                </Text>
             </View>
@@ -364,6 +476,14 @@ export default function MapScreen() {
               <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder="Ville" />
               <TextInput style={styles.input} value={String(editingPlace.price || "")} keyboardType="numeric" onChangeText={t => setEditingPlace(p => ({...p, price: parseFloat(t)}))} placeholder="Prix de l'Orval (€)" />
               <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder="Infos (ex: stock, ambiance...)" multiline />
+
+              {/* Mentions légales pour le contenu utilisateur */}
+              <Text style={styles.contentDisclaimerText}>
+                Les utilisateurs sont responsables du contenu qu'ils publient.
+              </Text>
+              <Text style={styles.contentDisclaimerText}>
+                OrvalMaps peut supprimer tout contenu inapproprié.
+              </Text>
 
               <TouchableOpacity style={styles.saveButton} onPress={handleSavePlace} disabled={isUploading}>
                 {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>Envoyer</Text>}
@@ -414,7 +534,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, paddingHorizontal: 15, fontSize: 16 },
   iconButton: { padding: 10 },
   circleButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: "white", justifyContent: "center", alignItems: "center", elevation: 5 },
-  sideButtons: { position: 'absolute', right: 20, bottom: 230, zIndex: 10, alignItems: 'flex-end' },
+  sideButtons: { position: 'absolute', right: 20, bottom: 100, zIndex: 10, alignItems: 'flex-end' },
   sideBtn: { backgroundColor: '#ff8c00', padding: 12, borderRadius: 25, marginBottom: 10, elevation: 5 },
   panel: { position: "absolute", bottom: 0, width: "100%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, zIndex: 20 },
   panelHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
@@ -422,9 +542,9 @@ const styles = StyleSheet.create({
   placeTitle: { fontSize: 22, fontWeight: "bold" },
   priceTag: { color: '#ff8c00', fontWeight: 'bold', fontSize: 16 },
   placeCity: { fontSize: 14, color: "#999", marginBottom: 10 },
-  actionsContainer: { flexDirection: "row", marginTop: 15 },
-  navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center" },
-  editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", marginLeft: 10 },
+  actionsContainer: { flexDirection: "row", marginTop: 15, gap: 8 },
+  navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   actionBtnText: { color: "white", fontWeight: "bold" },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   bottomSheet: { backgroundColor: "white", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: "90%" },
@@ -439,7 +559,12 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: 'red', padding: 10, borderRadius: 5, flex: 1, alignItems: 'center' },
   verificationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 15, padding: 10, backgroundColor: '#f8f9fa', borderRadius: 8 },
   verificationText: { fontSize: 12, color: '#666', marginLeft: 8 },
-  actionsContainer: { flexDirection: "row", marginTop: 15, gap: 8 },
-  navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
-  editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  contentDisclaimerText: { // Nouveau style pour les mentions légales du contenu
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 5,
+    marginHorizontal: 10,
+  },
 });

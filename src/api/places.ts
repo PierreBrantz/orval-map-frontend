@@ -155,6 +155,16 @@ export async function addPlace(baseUrl: string, place: Omit<Place, "id">): Promi
   return res.json();
 }
 
+export async function deletePlace(baseUrl: string, placeId: number): Promise<void> {
+  const res = await authorizedFetch(`${baseUrl}/api/places/${placeId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`Delete Error: ${res.status} - ${errorBody}`);
+  }
+}
+
 export async function clearPlacesCache(): Promise<void> {
   await AsyncStorage.removeItem(CACHE_KEY);
 }
