@@ -85,6 +85,7 @@ export default function MapScreen() {
   // Formulaire
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [displayPriceString, setDisplayPriceString] = useState<string>(""); // Nouvel état pour la saisie du prix
 
   // Recherche & Localisation
   const [searchText, setSearchText] = useState("");
@@ -111,6 +112,13 @@ export default function MapScreen() {
     const ownerName = getOwnerUsername(place);
     return ownerName && ownerName.toLowerCase().trim() === username.toLowerCase().trim();
   };
+
+  // Initialisation de displayPriceString lors de l'ouverture du modal
+  useEffect(() => {
+    if (isModalVisible) {
+      setDisplayPriceString(editingPlace.price !== undefined ? String(editingPlace.price).replace('.', ',') : "");
+    }
+  }, [isModalVisible, editingPlace.price]);
 
   // Load places and verification status on mount
   useEffect(() => {
@@ -209,6 +217,28 @@ export default function MapScreen() {
     if (status !== 'granted') return Alert.alert('Désolé', 'Permission requise !');
     let result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 });
     if (!result.canceled) setEditingPlace(p => ({ ...p, imageUrl: result.assets[0].uri }));
+  };
+
+  const handlePriceInputChange = (text: string) => {
+    // Met à jour la chaîne affichée directement
+    setDisplayPriceString(text);
+
+    // Nettoie la chaîne pour la conversion numérique
+    // Autorise uniquement les chiffres, la virgule et le point
+    let cleanedText = text.replace(/[^0-9.,]/g, '');
+    // Remplace la virgule par un point pour parseFloat
+    cleanedText = cleanedText.replace(',', '.');
+    // S'assure qu'il n'y a qu'un seul point décimal
+    const parts = cleanedText.split('.');
+    if (parts.length > 2) {
+      cleanedText = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Convertit en nombre
+    const numericValue = parseFloat(cleanedText);
+
+    // Met à jour la valeur numérique dans editingPlace
+    setEditingPlace(p => ({ ...p, price: isNaN(numericValue) ? undefined : numericValue }));
   };
 
   const handleSavePlace = async () => {
@@ -465,8 +495,14 @@ export default function MapScreen() {
       <Modal visible={isModalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <View style={styles.bottomSheet}>
-            <ScrollView>
+            <ScrollView contentContainerStyle={styles.modalScrollViewContent}>
               <Text style={styles.modalTitle}>{editingPlace.id ? "Modifier le café" : "Suggérer un café"}</Text>
+              {/* Message d'information sur la position automatique */}
+              {!editingPlace.id && ( // Afficher uniquement pour la suggestion, pas l'édition
+                <Text style={styles.locationInfoText}>
+                  Votre position actuelle sera automatiquement utilisée. Veuillez être dans le café.
+                </Text>
+              )}
               {editingPlace.imageUrl && <Image source={{ uri: editingPlace.imageUrl }} style={styles.previewImage} />}
               <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
                 <Ionicons name="camera" size={20} color="#666" style={{marginRight: 8}} />
@@ -474,7 +510,13 @@ export default function MapScreen() {
               </TouchableOpacity>
               <TextInput style={styles.input} value={editingPlace.name} onChangeText={t => setEditingPlace(p => ({...p, name: t}))} placeholder="Nom du café" />
               <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder="Ville" />
-              <TextInput style={styles.input} value={String(editingPlace.price || "")} keyboardType="numeric" onChangeText={t => setEditingPlace(p => ({...p, price: parseFloat(t)}))} placeholder="Prix de l'Orval (€)" />
+              <TextInput
+                style={styles.input}
+                value={displayPriceString} // Lié à l'état local de la chaîne
+                keyboardType="decimal-pad" // Clavier numérique avec décimales
+                onChangeText={handlePriceInputChange} // Nouvelle fonction de gestion
+                placeholder="Prix de l'Orval (€)"
+              />
               <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder="Infos (ex: stock, ambiance...)" multiline />
 
               {/* Mentions légales pour le contenu utilisateur */}
@@ -484,12 +526,14 @@ export default function MapScreen() {
               <Text style={styles.contentDisclaimerText}>
                 OrvalMaps peut supprimer tout contenu inapproprié.
               </Text>
-
+            </ScrollView>
+            {/* Boutons déplacés en dehors du ScrollView */}
+            <View style={styles.modalFixedButtonsContainer}>
               <TouchableOpacity style={styles.saveButton} onPress={handleSavePlace} disabled={isUploading}>
                 {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>Envoyer</Text>}
               </TouchableOpacity>
-              <TouchableOpacity style={{marginTop: 10, alignItems: 'center'}} onPress={() => setIsModalVisible(false)}><Text>Annuler</Text></TouchableOpacity>
-            </ScrollView>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setIsModalVisible(false)}><Text style={styles.cancelButtonText}>Annuler</Text></TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -511,6 +555,7 @@ export default function MapScreen() {
               <View style={styles.requestCard}>
                 <Text style={{fontWeight: 'bold', fontSize: 18}}>{item.name}</Text>
                 <Text>📍 {item.city}</Text>
+                <Text>Lat: {item.lat?.toFixed(4)}, Lng: {item.lng?.toFixed(4)}</Text>
                 <Text>🍺 Prix Orval: {item.price}€</Text>
                 <View style={{flexDirection: 'row', marginTop: 15}}>
                   <TouchableOpacity style={styles.approveBtn} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>Valider</Text></TouchableOpacity>
@@ -547,7 +592,19 @@ const styles = StyleSheet.create({
   editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   actionBtnText: { color: "white", fontWeight: "bold" },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
-  bottomSheet: { backgroundColor: "white", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: "90%" },
+  bottomSheet: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+    flex: 1, // Permet au bottomSheet de prendre la hauteur disponible
+    justifyContent: 'space-between', // Pousse le contenu scrollable et les boutons aux extrémités
+    paddingTop: 20 // Padding en haut pour le titre
+  },
+  modalScrollViewContent: { // Nouveau style pour le contenu scrollable
+    paddingHorizontal: 20, // Padding horizontal pour le contenu
+    flexGrow: 1, // Permet au contenu de s'étendre et de défiler
+  },
   modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ff8c00", marginBottom: 15 },
   input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 10 },
   previewImage: { width: "100%", height: 150, borderRadius: 8, marginBottom: 10 },
@@ -559,12 +616,34 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: 'red', padding: 10, borderRadius: 5, flex: 1, alignItems: 'center' },
   verificationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 15, padding: 10, backgroundColor: '#f8f9fa', borderRadius: 8 },
   verificationText: { fontSize: 12, color: '#666', marginLeft: 8 },
-  contentDisclaimerText: { // Nouveau style pour les mentions légales du contenu
+  contentDisclaimerText: {
     fontSize: 12,
     color: '#666',
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 5,
     marginHorizontal: 10,
+  },
+  locationInfoText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+    marginHorizontal: 10,
+  },
+  modalFixedButtonsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    marginTop: 10,
+  },
+  cancelButton: {
+    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  cancelButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
