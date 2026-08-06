@@ -7,13 +7,16 @@ export interface Place {
   city?: string;
   ownerUsername?: string;
   imageUrl?: string;
-  price?: number; // Ajout du prix de l'Orval
+  price?: number;
   verificationCount?: number;
   lastVerificationDate?: string;
+  placeType?: 'BAR' | 'RESTAURANT' | 'BREWERY';
+  hasUserVerified?: boolean; // Champ pour savoir si l'utilisateur connecté a déjà vérifié ce lieu
 }
 
 export interface PlaceRequest extends Omit<Place, 'id'> {
   id?: number;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   requesterUsername?: string;
+  placeType?: 'BAR' | 'RESTAURANT' | 'BREWERY';
 }

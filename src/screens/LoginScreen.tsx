@@ -9,32 +9,36 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  SafeAreaView
+  SafeAreaView,
+  useColorScheme
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useApiBaseUrl } from "../hooks/useApiBaseUrl";
+import { API_BASE_URL } from "../config";
 import { useLoginUser } from "../hooks/useLoginUser";
 import { useAuth } from "../context/AuthContext";
 
-export default function LoginScreen({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
+export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { onSwitchToRegister: () => void, onForgotPassword: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { baseUrl, loading: loadingUrl, error: errorUrl } = useApiBaseUrl();
   const { loginUser } = useLoginUser();
   const { hideLogin } = useAuth();
 
+  const colorScheme = useColorScheme();
+  const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
+
   const handleLogin = async () => {
-    if (!baseUrl) return Alert.alert("Erreur", errorUrl || "Serveur introuvable");
     const cleanUsername = username.trim();
-    if (!cleanUsername || !password) return Alert.alert("Erreur", "Veuillez remplir tous les champs");
+    if (!cleanUsername || !password) {
+      return Alert.alert("Erreur", "Veuillez remplir tous les champs");
+    }
 
     Keyboard.dismiss();
+    setLoading(true);
     try {
-      setLoading(true);
-      await loginUser(baseUrl, cleanUsername, password);
+      await loginUser(API_BASE_URL, cleanUsername, password);
     } catch (e: any) {
       Alert.alert("Erreur", e.message || "Impossible de se connecter");
     } finally {
@@ -52,9 +56,6 @@ export default function LoginScreen({ onSwitchToRegister }: { onSwitchToRegister
         <Text style={styles.title}>Connexion 🍺</Text>
 
         <View style={styles.form}>
-          {loadingUrl && <ActivityIndicator style={{ marginBottom: 20 }} />}
-          {errorUrl && <Text style={styles.errorText}>{errorUrl}</Text>}
-
           <View style={styles.inputContainer}>
             <MaterialIcons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
@@ -63,7 +64,7 @@ export default function LoginScreen({ onSwitchToRegister }: { onSwitchToRegister
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholderTextColor}
             />
           </View>
 
@@ -75,17 +76,21 @@ export default function LoginScreen({ onSwitchToRegister }: { onSwitchToRegister
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholderTextColor}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
               <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={22} color="#999" />
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity style={styles.forgotPasswordButton} onPress={onForgotPassword}>
+            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
-            style={[styles.button, (!baseUrl || loading) && styles.buttonDisabled]}
+            style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleLogin}
-            disabled={loading || !baseUrl}
+            disabled={loading}
           >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Se connecter</Text>}
           </TouchableOpacity>
@@ -104,7 +109,6 @@ const styles = StyleSheet.create({
   closeButton: { position: "absolute", top: 20, right: 20, padding: 10 },
   title: { fontSize: 32, fontWeight: "bold", textAlign: "center", marginBottom: 40, color: "#333" },
   form: { width: '100%' },
-  errorText: { color: "#d32f2f", textAlign: "center", marginBottom: 15, fontSize: 14 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -119,12 +123,19 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 16, color: '#333' },
   eyeIcon: { padding: 5 },
+  forgotPasswordButton: {
+    alignItems: 'flex-end',
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    color: '#ff8c00',
+    fontSize: 14,
+  },
   button: {
     backgroundColor: "#ff8c00",
     padding: 18,
     borderRadius: 15,
     alignItems: "center",
-    marginTop: 20,
     elevation: 3,
     shadowColor: '#ff8c00',
     shadowOffset: { width: 0, height: 4 },

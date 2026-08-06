@@ -3,7 +3,9 @@ import { useAuth } from "../context/AuthContext";
 export const useLoginUser = () => {
   const { login } = useAuth();
 
-  const loginUser = async (baseUrl: string | null, username: string, password: string) => {
+  // The first parameter can be a username or an email.
+  // We send it as 'login' which is a common convention for a field that can be either.
+  const loginUser = async (baseUrl: string | null, loginIdentifier: string, password: string) => {
     if (!baseUrl) {
       throw new Error("Impossible de se connecter : URL du serveur inconnue.");
     }
@@ -11,13 +13,13 @@ export const useLoginUser = () => {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ login: loginIdentifier, password }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      // ✅ Tente d'extraire un message d'erreur plus précis du backend
-      throw new Error(errorData.message || errorData.error || `Erreur de connexion (${response.status})`);
+      // Try to extract a more specific error message from the backend
+      throw new Error(errorData.message || errorData.error || `Identifiants invalides ou jeton manquant`);
     }
 
     const data = await response.json();

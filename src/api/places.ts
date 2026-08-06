@@ -26,21 +26,30 @@ async function authorizedFetch(input: RequestInfo, init: RequestInit = {}) {
   return fetch(input, { ...init, headers });
 }
 
-export async function fetchPlaces(baseUrl: string, page = 0, size = 20): Promise<Place[]> {
+export async function fetchPlaces(baseUrl: string, placeType: 'BAR' | 'RESTAURANT' | 'BREWERY' | null = null, page = 0, size = 20): Promise<Place[]> {
   if (!baseUrl) throw new Error("baseUrl required");
-  if (page === 0) {
+
+  let url = `${baseUrl.replace(/\/$/, "")}/api/places?page=${page}&size=${size}`;
+  if (placeType) {
+    url += `&placeType=${placeType}`;
+  }
+
+  // Only use cache if no specific placeType filter is applied and it's the first page
+  if (page === 0 && !placeType) {
     const cached = await AsyncStorage.getItem(CACHE_KEY);
     if (cached) {
       const parsed: CachedPlaces = JSON.parse(cached);
       if (Date.now() - parsed.timestamp < CACHE_TTL_MS) return parsed.data;
     }
   }
-  const url = `${baseUrl.replace(/\/$/, "")}/api/places?page=${page}&size=${size}`;
+
   const res = await authorizedFetch(url);
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
   const responseJson: PagedResponse<Place> = await res.json();
   const data = responseJson.content || [];
-  if (page === 0) {
+
+  // Only cache if no specific placeType filter is applied and it's the first page
+  if (page === 0 && !placeType) {
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
   }
   return data;

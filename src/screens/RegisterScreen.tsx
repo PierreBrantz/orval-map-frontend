@@ -11,10 +11,11 @@ import {
   Keyboard,
   SafeAreaView,
   ScrollView,
-  Linking // Import Linking
+  Linking,
+  useColorScheme
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useApiBaseUrl } from "../hooks/useApiBaseUrl";
+import { API_BASE_URL } from "../config"; // Importer la constante
 import { useRegisterUser } from "../hooks/useRegisterUser";
 import { useAuth } from "../context/AuthContext";
 
@@ -25,12 +26,13 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { baseUrl } = useApiBaseUrl();
   const { registerUser } = useRegisterUser();
   const { hideLogin } = useAuth();
 
+  const colorScheme = useColorScheme();
+  const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
+
   const validatePassword = (pwd: string) => {
-    // Minimum 8 caractères et au moins un chiffre
     const hasNumber = /\d/.test(pwd);
     return pwd.length >= 8 && hasNumber;
   };
@@ -42,18 +44,15 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
     if (!cleanUsername || !cleanEmail || !password) {
       return Alert.alert("Erreur", "Tous les champs sont obligatoires.");
     }
-
     if (!validatePassword(password)) {
-      return Alert.alert(
-        "Mot de passe trop faible",
-        "Votre mot de passe doit contenir au moins 8 caractères et au moins un chiffre."
-      );
+      return Alert.alert("Mot de passe trop faible", "Votre mot de passe doit contenir au moins 8 caractères et au moins un chiffre.");
     }
 
     Keyboard.dismiss();
+    setLoading(true);
     try {
-      setLoading(true);
-      await registerUser(baseUrl, { username: cleanUsername, email: cleanEmail, password });
+      // Utiliser directement la constante API_BASE_URL
+      await registerUser(API_BASE_URL, { username: cleanUsername, email: cleanEmail, password });
       Alert.alert("Bienvenue !", "Votre compte a été créé avec succès.");
     } catch (e: any) {
       Alert.alert("Erreur", e.message || "Impossible de créer le compte");
@@ -62,13 +61,8 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
     }
   };
 
-  const openTerms = () => {
-    if (baseUrl) Linking.openURL(`${baseUrl.replace(/\/$/, "")}/terms.html`);
-  };
-
-  const openPrivacy = () => {
-    if (baseUrl) Linking.openURL(`${baseUrl.replace(/\/$/, "")}/privacy.html`);
-  };
+  const openTerms = () => Linking.openURL(`${API_BASE_URL.replace(/\/$/, "")}/terms.html`);
+  const openPrivacy = () => Linking.openURL(`${API_BASE_URL.replace(/\/$/, "")}/privacy.html`);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
@@ -88,7 +82,7 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholderTextColor}
             />
           </View>
 
@@ -101,7 +95,7 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholderTextColor}
             />
           </View>
 
@@ -113,7 +107,7 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholderTextColor}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
               <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={22} color="#999" />
@@ -122,12 +116,10 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
 
           <Text style={styles.hintText}>Minimum 8 caractères et au moins 1 chiffre.</Text>
 
-          {/* Message d'âge légal */}
           <Text style={styles.ageDisclaimerText}>
             En créant un compte, vous confirmez avoir l'âge légal pour consommer de l'alcool dans votre pays.
           </Text>
 
-          {/* Liens vers les documents légaux */}
           <View style={styles.legalLinksContainer}>
             <TouchableOpacity onPress={openTerms}>
               <Text style={styles.legalLinkText}>Conditions d'utilisation</Text>
@@ -181,13 +173,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginHorizontal: 10,
   },
-  legalLinksContainer: { // Nouveau style pour le conteneur des liens légaux
+  legalLinksContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: -10, // Ajustement pour rapprocher du texte précédent
+    marginTop: -10,
     marginBottom: 20,
   },
-  legalLinkText: { // Nouveau style pour le texte des liens légaux
+  legalLinkText: {
     color: '#ff8c00',
     fontSize: 13,
     textDecorationLine: 'underline',

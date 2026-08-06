@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -16,88 +16,43 @@ import {
   StatusBar,
   Image,
   Linking,
-  FlatList
+  FlatList,
+  useColorScheme
 } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // Import AsyncStorage
-
+import { API_BASE_URL } from "../config";
 import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggestPlace, fetchPlaceRequests, validatePlaceRequest, verifyPlace, deletePlace } from "../api/places";
-import { useApiBaseUrl } from "../hooks/useApiBaseUrl";
 import { useAuth } from "../context/AuthContext";
 import { Place, PlaceRequest } from "../types/Place";
-
-// Helper functions for AsyncStorage
-const VERIFICATION_STORAGE_KEY = "place_verification_timestamps";
-
-type VerificationTimestamps = {
-  [placeId: number]: number; // placeId -> timestamp of last verification
-};
-
-const getVerificationTimestamps = async (): Promise<VerificationTimestamps> => {
-  try {
-    const jsonValue = await AsyncStorage.getItem(VERIFICATION_STORAGE_KEY);
-    return jsonValue != null ? JSON.parse(jsonValue) : {};
-  } catch (e) {
-    console.error("Error reading verification timestamps from AsyncStorage", e);
-    return {};
-  }
-};
-
-const setVerificationTimestamp = async (placeId: number, timestamp: number) => {
-  try {
-    const existingTimestamps = await getVerificationTimestamps();
-    const updatedTimestamps = {
-      ...existingTimestamps,
-      [placeId]: timestamp,
-    };
-    const jsonValue = JSON.stringify(updatedTimestamps);
-    await AsyncStorage.setItem(VERIFICATION_STORAGE_KEY, jsonValue);
-  } catch (e) {
-    console.error("Error writing verification timestamp to AsyncStorage", e);
-  }
-};
-
-const isSameDay = (timestamp1: number, timestamp2: number): boolean => {
-  const date1 = new Date(timestamp1);
-  const date2 = new Date(timestamp2);
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
-};
-
+import Map from "../components/Map"; // Importation du composant abstrait
 
 export default function MapScreen() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [verifiedPlacesToday, setVerifiedPlacesToday] = useState<Set<number>>(new Set()); // New state to track today's verifications
 
-  // Modals
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isAdminPanelVisible, setIsAdminPanelVisible] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PlaceRequest[]>([]);
 
-  // Formulaire
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({});
   const [isUploading, setIsUploading] = useState(false);
-  const [displayPriceString, setDisplayPriceString] = useState<string>(""); // Nouvel état pour la saisie du prix
+  const [displayPriceString, setDisplayPriceString] = useState<string>("");
 
-  // Recherche & Localisation
   const [searchText, setSearchText] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [region, setRegion] = useState<Region | undefined>(undefined);
+  const [region, setRegion] = useState<any | undefined>(undefined);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [selectedFilterType, setSelectedFilterType] = useState<'BAR' | 'RESTAURANT' | 'BREWERY' | null>(null);
 
   const slideAnim = useRef(new Animated.Value(300)).current;
-  const alertShown = useRef(false);
 
-  const { baseUrl } = useApiBaseUrl();
   const { roles, username, logout, isGuest, showLogin } = useAuth();
+
+  const colorScheme = useColorScheme();
+  const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
 
   const isAdmin = roles?.includes("ROLE_ADMIN") || roles?.includes("ADMIN");
   const isOwner = roles?.includes("ROLE_OWNER") || roles?.includes("OWNER");
@@ -113,38 +68,29 @@ export default function MapScreen() {
     return ownerName && ownerName.toLowerCase().trim() === username.toLowerCase().trim();
   };
 
-  // Initialisation de displayPriceString lors de l'ouverture du modal
   useEffect(() => {
     if (isModalVisible) {
       setDisplayPriceString(editingPlace.price !== undefined ? String(editingPlace.price).replace('.', ',') : "");
     }
   }, [isModalVisible, editingPlace.price]);
 
-  // Load places and verification status on mount
   useEffect(() => {
-    if (!baseUrl) return;
     const loadData = async () => {
       try {
-        const fetchedPlaces = await fetchPlaces(baseUrl);
+        const fetchedPlaces = await fetchPlaces(API_BASE_URL, selectedFilterType);
         setPlaces(fetchedPlaces);
-
-        const timestamps = await getVerificationTimestamps();
-        const today = Date.now();
-        const verifiedTodayIds = new Set<number>();
-        for (const placeId in timestamps) {
-          if (isSameDay(timestamps[placeId], today)) {
-            verifiedTodayIds.add(Number(placeId));
-          }
-        }
-        setVerifiedPlacesToday(verifiedTodayIds);
       } catch (err) {
         console.error(err);
       }
     };
     loadData();
-  }, [baseUrl, username]);
+  }, [username, selectedFilterType]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') {
+      setDefaultRegion();
+      return;
+    }
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -179,9 +125,9 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (selectedPlace) {
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: Platform.OS !== 'web' }).start();
     } else {
-      Animated.timing(slideAnim, { toValue: 300, duration: 200, useNativeDriver: true }).start();
+      Animated.timing(slideAnim, { toValue: 300, duration: 200, useNativeDriver: Platform.OS !== 'web' }).start();
     }
   }, [selectedPlace]);
 
@@ -220,42 +166,30 @@ export default function MapScreen() {
   };
 
   const handlePriceInputChange = (text: string) => {
-    // Met à jour la chaîne affichée directement
-    setDisplayPriceString(text);
-
-    // Nettoie la chaîne pour la conversion numérique
-    // Autorise uniquement les chiffres, la virgule et le point
-    let cleanedText = text.replace(/[^0-9.,]/g, '');
-    // Remplace la virgule par un point pour parseFloat
-    cleanedText = cleanedText.replace(',', '.');
-    // S'assure qu'il n'y a qu'un seul point décimal
+    let cleanedText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
     const parts = cleanedText.split('.');
     if (parts.length > 2) {
       cleanedText = parts[0] + '.' + parts.slice(1).join('');
     }
-
-    // Convertit en nombre
+    setDisplayPriceString(text);
     const numericValue = parseFloat(cleanedText);
-
-    // Met à jour la valeur numérique dans editingPlace
     setEditingPlace(p => ({ ...p, price: isNaN(numericValue) ? undefined : numericValue }));
   };
 
   const handleSavePlace = async () => {
-    if (!baseUrl) return;
     try {
       setIsUploading(true);
       let finalImageUrl = editingPlace.imageUrl;
       if (editingPlace.imageUrl && editingPlace.imageUrl.startsWith('file://')) {
         if (editingPlace.id) {
-          finalImageUrl = await uploadPlaceImage(baseUrl, String(editingPlace.id), editingPlace.imageUrl);
+          finalImageUrl = await uploadPlaceImage(API_BASE_URL, String(editingPlace.id), editingPlace.imageUrl);
         } else {
-          finalImageUrl = await uploadRequestImage(baseUrl, editingPlace.imageUrl);
+          finalImageUrl = await uploadRequestImage(API_BASE_URL, editingPlace.imageUrl);
         }
       }
 
       if (editingPlace.id) {
-        const saved = await updatePlace(baseUrl, { ...editingPlace, imageUrl: finalImageUrl } as Place);
+        const saved = await updatePlace(API_BASE_URL, { ...editingPlace, imageUrl: finalImageUrl } as Place);
         setPlaces(prev => prev.map(p => p.id === saved.id ? saved : p));
         setSelectedPlace(saved);
         Alert.alert("Succès", "Lieu mis à jour !");
@@ -264,94 +198,86 @@ export default function MapScreen() {
           ...editingPlace,
           imageUrl: finalImageUrl,
           lat: editingPlace.lat || region?.latitude || 0,
-          lng: editingPlace.lng || region?.longitude || 0
+          lng: editingPlace.lng || region?.longitude || 0,
+          placeType: editingPlace.placeType || 'BAR'
         };
-        await suggestPlace(baseUrl, payload as any);
+        await suggestPlace(API_BASE_URL, payload as any);
         Alert.alert("Merci !", "Votre suggestion a été envoyée à l'admin.");
       }
       setIsModalVisible(false);
     } catch (e: any) {
       Alert.alert("Erreur d'enregistrement", e.message || "Une erreur inconnue est survenue.");
-      console.error("Save Error:", e);
     } finally {
       setIsUploading(false);
     }
   };
 
   const openAdminPanel = async () => {
-    if (!baseUrl) return;
     try {
-      console.log("Fetching pending requests from:", baseUrl);
-      const requests = await fetchPlaceRequests(baseUrl);
+      const requests = await fetchPlaceRequests(API_BASE_URL);
       setPendingRequests(requests);
       setIsAdminPanelVisible(true);
     } catch (e: any) {
       Alert.alert("Erreur Admin", e.message || "Une erreur inconnue est survenue.");
-      console.error("Fetch requests error:", e);
     }
   };
 
   const handleValidate = async (id: number, approve: boolean) => {
-    if (!baseUrl) return;
     try {
-      await validatePlaceRequest(baseUrl, id, approve);
+      await validatePlaceRequest(API_BASE_URL, id, approve);
       setPendingRequests(prev => prev.filter(r => r.id !== id));
-      if (approve) fetchPlaces(baseUrl).then(setPlaces);
+      if (approve) fetchPlaces(API_BASE_URL, selectedFilterType).then(setPlaces);
       Alert.alert("Ok", approve ? "Lieu ajouté !" : "Demande rejetée.");
-    } catch (e) {
+    } catch (e: any) {
       Alert.alert("Erreur", "Action impossible.");
     }
   };
 
   const handleVerifyPlace = async (place: Place) => {
-    if (!baseUrl || !place.id) return;
-
-    if (verifiedPlacesToday.has(place.id)) {
-      Alert.alert("Déjà vérifié", "Vous avez déjà vérifié ce lieu aujourd'hui. Revenez demain !");
-      return;
-    }
-
+    if (!place.id) return;
     try {
-      const updatedPlace = await verifyPlace(baseUrl, place.id);
-      setPlaces(prev => prev.map(p => p.id === updatedPlace.id ? updatedPlace : p));
-      setSelectedPlace(updatedPlace); // Met à jour le panneau d'infos
+      const updatedPlace = await verifyPlace(API_BASE_URL, place.id);
+      setPlaces(prevPlaces =>
+        prevPlaces.map(p =>
+          p.id === updatedPlace.id ? { ...p, ...updatedPlace, hasUserVerified: true } : p
+        )
+      );
+      setSelectedPlace(prevSelected =>
+        prevSelected ? { ...prevSelected, ...updatedPlace, hasUserVerified: true } : null
+      );
       Alert.alert("Santé !", `Merci d'avoir confirmé que l'on sert toujours de l'Orval à ${place.name}.`);
-
-      // Record verification timestamp
-      await setVerificationTimestamp(place.id, Date.now());
-      setVerifiedPlacesToday(prev => new Set(prev).add(place.id!));
-
     } catch (e: any) {
       Alert.alert("Erreur", e.message || "Impossible de vérifier le lieu.");
     }
   };
 
   const handleDeletePlace = async (placeId: number) => {
-    if (!baseUrl) return;
-    Alert.alert(
-      "Confirmation",
-      "Êtes-vous sûr de vouloir supprimer ce café ?",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deletePlace(baseUrl, placeId);
-              setPlaces(prev => prev.filter(p => p.id !== placeId));
-              setSelectedPlace(null);
-              Alert.alert("Succès", "Le café a été supprimé.");
-            } catch (e: any) {
-              Alert.alert("Erreur", e.message || "Impossible de supprimer le lieu.");
-            }
-          },
+    Alert.alert("Confirmation", "Êtes-vous sûr de vouloir supprimer ce café ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer", style: "destructive",
+        onPress: async () => {
+          try {
+            await deletePlace(API_BASE_URL, placeId);
+            setPlaces(prev => prev.filter(p => p.id !== placeId));
+            setSelectedPlace(null);
+            Alert.alert("Succès", "Le café a été supprimé.");
+          } catch (e: any) {
+            Alert.alert("Erreur", e.message || "Impossible de supprimer le lieu.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const isPlaceVerifiedToday = selectedPlace?.id ? verifiedPlacesToday.has(selectedPlace.id) : false;
+  const getPlaceTypeDisplayName = (placeType: 'BAR' | 'RESTAURANT' | 'BREWERY') => {
+    switch (placeType) {
+      case 'BAR': return 'Bar';
+      case 'RESTAURANT': return 'Restaurant';
+      case 'BREWERY': return 'Brasserie';
+      default: return '';
+    }
+  };
 
   if (isLoadingLocation || !region) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#ff8c00" /></View>;
@@ -360,40 +286,42 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <MapView
-        style={StyleSheet.absoluteFill}
+      <Map
         region={region}
         onRegionChangeComplete={setRegion}
-        onPress={() => { setSelectedPlace(null); Keyboard.dismiss(); }}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
-      >
-        {places.map((p) => (
-          <Marker
-            key={`${p.id}-${isThisMyPlace(p)}`}
-            coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor={isThisMyPlace(p) ? "green" : "red"}
-            onPress={(e) => { e.stopPropagation(); setSelectedPlace(p); }}
-          />
-        ))}
-      </MapView>
+        places={places}
+        onMapPress={() => { setSelectedPlace(null); Keyboard.dismiss(); }}
+        onMarkerPress={setSelectedPlace}
+        isThisMyPlace={isThisMyPlace}
+      />
 
-      {/* TOP BAR */}
       <SafeAreaView style={styles.topContainer} pointerEvents="box-none">
-        <View style={styles.searchBarContainer}>
-          <TextInput style={styles.searchInput} placeholder="Ville..." value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchCity} />
-          <TouchableOpacity style={styles.iconButton} onPress={handleSearchCity}>
-            {isSearching ? (
-              <ActivityIndicator size="small" color="#ff8c00" />
-            ) : (
-              <Ionicons name="search" size={20} color="#666" />
-            )}
+        <View style={styles.topControlsRow}>
+          <View style={styles.searchBarContainer}>
+            <TextInput style={styles.searchInput} placeholder="Ville..." value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchCity} placeholderTextColor={placeholderTextColor} />
+            <TouchableOpacity style={styles.iconButton} onPress={handleSearchCity}>
+              {isSearching ? <ActivityIndicator size="small" color="#ff8c00" /> : <Ionicons name="search" size={20} color="#666" />}
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.circleButton} onPress={isGuest ? showLogin : logout}>
+            <Ionicons name={isGuest ? "person-circle-outline" : "log-out-outline"} size={26} color="#333" />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.circleButton} onPress={isGuest ? showLogin : logout}>
-          <Ionicons name={isGuest ? "person-circle-outline" : "log-out-outline"} size={26} color="#333" />
-        </TouchableOpacity>
+
+        <View style={styles.filterButtonsContainer}>
+          <TouchableOpacity style={[styles.filterButton, selectedFilterType === null && styles.filterButtonActive]} onPress={() => setSelectedFilterType(null)}>
+            <Text style={[styles.filterButtonText, selectedFilterType === null && styles.filterButtonTextActive]}>Tous</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'BAR' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('BAR')}>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'BAR' && styles.filterButtonTextActive]}>Bars</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'RESTAURANT' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('RESTAURANT')}>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'RESTAURANT' && styles.filterButtonTextActive]}>Restaurants</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'BREWERY' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('BREWERY')}>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'BREWERY' && styles.filterButtonTextActive]}>Brasseries</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
 
       <View style={styles.sideButtons}>
@@ -402,16 +330,11 @@ export default function MapScreen() {
             <MaterialIcons name="notifications-active" size={20} color="white" />
           </TouchableOpacity>
         )}
-
         <TouchableOpacity style={styles.sideBtn} onPress={() => {
           if (isGuest) {
-            Alert.alert(
-              "Connexion requise",
-              "Vous devez être connecté pour suggérer un nouveau café Orval.",
-              [{ text: "Plus tard", style: "cancel" }, { text: "Se connecter", onPress: showLogin }]
-            );
+            Alert.alert("Connexion requise", "Vous devez être connecté pour suggérer un nouveau café Orval.", [{ text: "Plus tard", style: "cancel" }, { text: "Se connecter", onPress: showLogin }]);
           } else {
-            setEditingPlace({});
+            setEditingPlace({ placeType: 'BAR' });
             setIsModalVisible(true);
           }
         }}>
@@ -422,23 +345,15 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* PANEL INFOS */}
       <Animated.View style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}>
         {selectedPlace && (
           <>
-            {selectedPlace.imageUrl ? (
-              <Image
-                source={{ uri: selectedPlace.imageUrl }}
-                style={styles.placeImage}
-                resizeMode="cover"
-                onError={(e) => console.warn("❌ Erreur image:", e.nativeEvent.error)}
-              />
-            ) : null}
-
+            {selectedPlace.imageUrl && <Image source={{ uri: selectedPlace.imageUrl }} style={styles.placeImage} resizeMode="cover" />}
             <View style={styles.panelHeader}>
               <View>
                 <Text style={styles.placeTitle}>{selectedPlace.name}</Text>
                 {selectedPlace.price && <Text style={styles.priceTag}>🍺 Orval: {selectedPlace.price}€</Text>}
+                {selectedPlace.placeType && <Text style={styles.placeTypeTag}>{getPlaceTypeDisplayName(selectedPlace.placeType)}</Text>}
               </View>
               <TouchableOpacity onPress={() => setSelectedPlace(null)}><Ionicons name="close" size={24} color="#999" /></TouchableOpacity>
             </View>
@@ -448,38 +363,29 @@ export default function MapScreen() {
                 <Ionicons name="navigate" size={18} color="white" style={{marginRight: 5}} />
                 <Text style={styles.actionBtnText}>Y Aller</Text>
               </TouchableOpacity>
-
-              {/* Bouton Vérifier */}
               {!isGuest && selectedPlace.id && (
                 <TouchableOpacity
-                  style={[styles.editBtn, {backgroundColor: isPlaceVerifiedToday ? '#cccccc' : '#28a745'}]}
+                  style={[styles.editBtn, {backgroundColor: selectedPlace.hasUserVerified ? '#cccccc' : '#28a745'}]}
                   onPress={() => handleVerifyPlace(selectedPlace)}
-                  disabled={isPlaceVerifiedToday}
+                  disabled={selectedPlace.hasUserVerified}
                 >
                   <Ionicons name="shield-checkmark-outline" size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>{isPlaceVerifiedToday ? "Vérifié aujourd'hui" : "Vérifier"}</Text>
+                  <Text style={styles.actionBtnText}>{selectedPlace.hasUserVerified ? "Vérifié" : "Vérifier"}</Text>
                 </TouchableOpacity>
               )}
-
               {(isAdmin || isThisMyPlace(selectedPlace)) && (
                 <TouchableOpacity style={styles.editBtn} onPress={() => { setEditingPlace(selectedPlace); setIsModalVisible(true); }}>
                   <Ionicons name="create" size={18} color="white" style={{marginRight: 5}} />
                   <Text style={styles.actionBtnText}>Editer</Text>
                 </TouchableOpacity>
               )}
-
-              {/* Bouton Supprimer pour Admin */}
               {isAdmin && selectedPlace.id && (
-                <TouchableOpacity
-                  style={[styles.editBtn, {backgroundColor: '#dc3545'}]}
-                  onPress={() => handleDeletePlace(selectedPlace.id!)}
-                >
+                <TouchableOpacity style={[styles.editBtn, {backgroundColor: '#dc3545'}]} onPress={() => handleDeletePlace(selectedPlace.id!)}>
                   <Ionicons name="trash" size={18} color="white" style={{marginRight: 5}} />
                   <Text style={styles.actionBtnText}>Supprimer</Text>
                 </TouchableOpacity>
               )}
             </View>
-
             <View style={styles.verificationContainer}>
                <Ionicons name="ribbon-outline" size={16} color="#666" />
                <Text style={styles.verificationText}>
@@ -491,43 +397,38 @@ export default function MapScreen() {
         )}
       </Animated.View>
 
-      {/* MODAL SUGGESTION / EDITION */}
-      <Modal visible={isModalVisible} animationType="slide" transparent={true}>
+      <Modal visible={isModalVisible} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <View style={styles.bottomSheet}>
             <ScrollView contentContainerStyle={styles.modalScrollViewContent}>
-              <Text style={styles.modalTitle}>{editingPlace.id ? "Modifier le café" : "Suggérer un café"}</Text>
-              {/* Message d'information sur la position automatique */}
-              {!editingPlace.id && ( // Afficher uniquement pour la suggestion, pas l'édition
-                <Text style={styles.locationInfoText}>
-                  Votre position actuelle sera automatiquement utilisée. Veuillez être dans le café.
-                </Text>
-              )}
+              <Text style={styles.modalTitle}>{editingPlace.id ? "Modifier le lieu" : "Suggérer un lieu"}</Text>
+              {!editingPlace.id && <Text style={styles.locationInfoText}>Votre position actuelle sera automatiquement utilisée. Veuillez être dans le lieu.</Text>}
               {editingPlace.imageUrl && <Image source={{ uri: editingPlace.imageUrl }} style={styles.previewImage} />}
               <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
                 <Ionicons name="camera" size={20} color="#666" style={{marginRight: 8}} />
                 <Text>Photo du lieu</Text>
               </TouchableOpacity>
-              <TextInput style={styles.input} value={editingPlace.name} onChangeText={t => setEditingPlace(p => ({...p, name: t}))} placeholder="Nom du café" />
-              <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder="Ville" />
-              <TextInput
-                style={styles.input}
-                value={displayPriceString} // Lié à l'état local de la chaîne
-                keyboardType="decimal-pad" // Clavier numérique avec décimales
-                onChangeText={handlePriceInputChange} // Nouvelle fonction de gestion
-                placeholder="Prix de l'Orval (€)"
-              />
-              <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder="Infos (ex: stock, ambiance...)" multiline />
-
-              {/* Mentions légales pour le contenu utilisateur */}
-              <Text style={styles.contentDisclaimerText}>
-                Les utilisateurs sont responsables du contenu qu'ils publient.
-              </Text>
-              <Text style={styles.contentDisclaimerText}>
-                OrvalMaps peut supprimer tout contenu inapproprié.
-              </Text>
+              <TextInput style={styles.input} value={editingPlace.name} onChangeText={t => setEditingPlace(p => ({...p, name: t}))} placeholder="Nom du lieu" placeholderTextColor={placeholderTextColor} />
+              <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder="Ville" placeholderTextColor={placeholderTextColor} />
+              <TextInput style={styles.input} value={displayPriceString} keyboardType="decimal-pad" onChangeText={handlePriceInputChange} placeholder="Prix de l'Orval (€)" placeholderTextColor={placeholderTextColor} />
+              <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder="Infos (ex: stock, ambiance...)" multiline placeholderTextColor={placeholderTextColor} />
+              <View style={styles.placeTypeSelectorContainer}>
+                <Text style={styles.placeTypeSelectorLabel}>Type de lieu:</Text>
+                <View style={styles.placeTypeButtons}>
+                  <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'BAR' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'BAR' }))}>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BAR' && styles.placeTypeButtonTextActive]}>Bar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'RESTAURANT' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'RESTAURANT' }))}>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'RESTAURANT' && styles.placeTypeButtonTextActive]}>Restaurant</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'BREWERY' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'BREWERY' }))}>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BREWERY' && styles.placeTypeButtonTextActive]}>Brasserie</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <Text style={styles.contentDisclaimerText}>Les utilisateurs sont responsables du contenu qu'ils publient.</Text>
+              <Text style={styles.contentDisclaimerText}>OrvalMaps peut supprimer tout contenu inapproprié.</Text>
             </ScrollView>
-            {/* Boutons déplacés en dehors du ScrollView */}
             <View style={styles.modalFixedButtonsContainer}>
               <TouchableOpacity style={styles.saveButton} onPress={handleSavePlace} disabled={isUploading}>
                 {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>Envoyer</Text>}
@@ -538,14 +439,11 @@ export default function MapScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL ADMIN PANEL */}
       <Modal visible={isAdminPanelVisible} animationType="fade">
         <SafeAreaView style={{flex: 1, backgroundColor: 'white'}}>
           <View style={{padding: 20, flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#eee'}}>
             <Text style={styles.modalTitle}>Demandes en attente</Text>
-            <TouchableOpacity onPress={() => setIsAdminPanelVisible(false)}>
-              <Ionicons name="close" size={28} color="#333" />
-            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setIsAdminPanelVisible(false)}><Ionicons name="close" size={28} color="#333" /></TouchableOpacity>
           </View>
           <FlatList
             data={pendingRequests}
@@ -557,6 +455,7 @@ export default function MapScreen() {
                 <Text>📍 {item.city}</Text>
                 <Text>Lat: {item.lat?.toFixed(4)}, Lng: {item.lng?.toFixed(4)}</Text>
                 <Text>🍺 Prix Orval: {item.price}€</Text>
+                {item.placeType && <Text>Type: {getPlaceTypeDisplayName(item.placeType)}</Text>}
                 <View style={{flexDirection: 'row', marginTop: 15}}>
                   <TouchableOpacity style={styles.approveBtn} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>Valider</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.rejectBtn} onPress={() => handleValidate(item.id!, false)}><Text style={{color: 'white', fontWeight: 'bold'}}>Refuser</Text></TouchableOpacity>
@@ -574,11 +473,12 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  topContainer: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", paddingHorizontal: 15, paddingTop: Platform.OS === 'android' ? 40 : 10, zIndex: 10 },
-  searchBarContainer: { flex: 1, flexDirection: "row", backgroundColor: "white", borderRadius: 30, padding: 5, alignItems: "center", elevation: 5, marginRight: 10 },
-  searchInput: { flex: 1, paddingHorizontal: 15, fontSize: 16 },
-  iconButton: { padding: 10 },
-  circleButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: "white", justifyContent: "center", alignItems: "center", elevation: 5 },
+  topContainer: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "column", paddingHorizontal: 10, paddingTop: Platform.OS === 'android' ? 10 : 5, zIndex: 10 },
+  topControlsRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
+  searchBarContainer: { flex: 1, flexDirection: "row", backgroundColor: "white", borderRadius: 25, padding: 3, alignItems: "center", elevation: 3, marginRight: 8 },
+  searchInput: { flex: 1, paddingHorizontal: 12, fontSize: 14 },
+  iconButton: { padding: 8 },
+  circleButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "white", justifyContent: "center", alignItems: "center", elevation: 3 },
   sideButtons: { position: 'absolute', right: 20, bottom: 100, zIndex: 10, alignItems: 'flex-end' },
   sideBtn: { backgroundColor: '#ff8c00', padding: 12, borderRadius: 25, marginBottom: 10, elevation: 5 },
   panel: { position: "absolute", bottom: 0, width: "100%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, zIndex: 20 },
@@ -586,25 +486,15 @@ const styles = StyleSheet.create({
   placeImage: { width: "100%", height: 150, borderRadius: 10, marginBottom: 15 },
   placeTitle: { fontSize: 22, fontWeight: "bold" },
   priceTag: { color: '#ff8c00', fontWeight: 'bold', fontSize: 16 },
+  placeTypeTag: { fontSize: 14, color: '#666', marginTop: 5 },
   placeCity: { fontSize: 14, color: "#999", marginBottom: 10 },
   actionsContainer: { flexDirection: "row", marginTop: 15, gap: 8 },
   navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   actionBtnText: { color: "white", fontWeight: "bold" },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
-  bottomSheet: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%",
-    flex: 1, // Permet au bottomSheet de prendre la hauteur disponible
-    justifyContent: 'space-between', // Pousse le contenu scrollable et les boutons aux extrémités
-    paddingTop: 20 // Padding en haut pour le titre
-  },
-  modalScrollViewContent: { // Nouveau style pour le contenu scrollable
-    paddingHorizontal: 20, // Padding horizontal pour le contenu
-    flexGrow: 1, // Permet au contenu de s'étendre et de défiler
-  },
+  bottomSheet: { backgroundColor: "white", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%", justifyContent: 'space-between', paddingTop: 20 },
+  modalScrollViewContent: { paddingHorizontal: 20, flexGrow: 1 },
   modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ff8c00", marginBottom: 15 },
   input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 10 },
   previewImage: { width: "100%", height: 150, borderRadius: 8, marginBottom: 10 },
@@ -616,34 +506,21 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: 'red', padding: 10, borderRadius: 5, flex: 1, alignItems: 'center' },
   verificationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 15, padding: 10, backgroundColor: '#f8f9fa', borderRadius: 8 },
   verificationText: { fontSize: 12, color: '#666', marginLeft: 8 },
-  contentDisclaimerText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 5,
-    marginHorizontal: 10,
-  },
-  locationInfoText: {
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 15,
-    marginHorizontal: 10,
-  },
-  modalFixedButtonsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    marginTop: 10,
-  },
-  cancelButton: {
-    marginTop: 10,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  cancelButtonText: {
-    color: '#999',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  contentDisclaimerText: { fontSize: 12, color: '#666', textAlign: 'center', marginTop: 10, marginBottom: 5, marginHorizontal: 10 },
+  locationInfoText: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 15, marginHorizontal: 10 },
+  modalFixedButtonsContainer: { paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, marginTop: 10 },
+  cancelButton: { marginTop: 10, alignItems: 'center', paddingVertical: 10 },
+  cancelButtonText: { color: '#999', fontSize: 16, fontWeight: 'bold' },
+  filterButtonsContainer: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'white', borderRadius: 15, padding: 3, marginTop: 5, elevation: 3, width: '100%' },
+  filterButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12 },
+  filterButtonActive: { backgroundColor: '#ff8c00' },
+  filterButtonText: { color: '#666', fontWeight: 'bold', fontSize: 12 },
+  filterButtonTextActive: { color: 'white' },
+  placeTypeSelectorContainer: { marginTop: 10, marginBottom: 15 },
+  placeTypeSelectorLabel: { fontSize: 16, fontWeight: 'bold', marginBottom: 8, color: '#333' },
+  placeTypeButtons: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#f0f0f0', borderRadius: 10, padding: 5 },
+  placeTypeButton: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  placeTypeButtonActive: { backgroundColor: '#ff8c00' },
+  placeTypeButtonText: { color: '#666', fontWeight: 'bold' },
+  placeTypeButtonTextActive: { color: 'white' },
 });
