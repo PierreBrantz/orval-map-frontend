@@ -1,8 +1,8 @@
 // App.tsx
 import React, { useState, useEffect } from "react";
-import { ActivityIndicator, View, Modal, Platform } from "react-native";
+import { ActivityIndicator, View, Modal, Platform, Text, TouchableOpacity, StyleSheet } from "react-native";
 import * as Linking from 'expo-linking';
-import { SafeAreaProvider } from 'react-native-safe-area-context'; // Importer le Provider
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
@@ -16,6 +16,7 @@ function AppContent() {
   const { isLoading, isLoginVisible, showLogin } = useAuth();
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword'>('login');
   const [resetToken, setResetToken] = useState<string | null>(null);
+  const [passwordResetSuccessWeb, setPasswordResetSuccessWeb] = useState(false); // Nouveau state pour le succès sur le web
 
   const linking = {
     prefixes: [prefix],
@@ -35,6 +36,7 @@ function AppContent() {
         const token = queryParams.token as string;
         console.log("Reset token found:", token);
         setResetToken(token);
+        setPasswordResetSuccessWeb(false); // Réinitialiser l'état de succès si un nouveau token arrive
         if (Platform.OS !== 'web') {
           showLogin();
         }
@@ -54,16 +56,36 @@ function AppContent() {
     };
   }, [showLogin]);
 
-  if (Platform.OS === 'web' && resetToken) {
-    return (
-      <ResetPasswordScreen
-        token={resetToken}
-        onPasswordResetSuccess={() => {
-          setResetToken(null);
-          alert("Mot de passe réinitialisé ! Vous pouvez fermer cet onglet.");
-        }}
-      />
-    );
+  // Logique spécifique pour le web pour afficher directement la page
+  if (Platform.OS === 'web') {
+    if (passwordResetSuccessWeb) {
+      return (
+        <View style={webStyles.container}>
+          <Text style={webStyles.title}>Mot de passe réinitialisé !</Text>
+          <Text style={webStyles.subtitle}>Vous pouvez maintenant fermer cet onglet ou vous connecter.</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPasswordResetSuccessWeb(false);
+              window.location.href = '/'; // Rediriger vers la page d'accueil (qui affichera la carte et la modale de login)
+            }}
+            style={webStyles.button}
+          >
+            <Text style={webStyles.buttonText}>Aller à la page de connexion</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    if (resetToken) {
+      return (
+        <ResetPasswordScreen
+          token={resetToken}
+          onPasswordResetSuccess={() => {
+            setResetToken(null);
+            setPasswordResetSuccessWeb(true); // Afficher la page de succès web
+          }}
+        />
+      );
+    }
   }
 
   if (isLoading) {
@@ -125,3 +147,37 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const webStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f8f8',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#ff8c00',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+});

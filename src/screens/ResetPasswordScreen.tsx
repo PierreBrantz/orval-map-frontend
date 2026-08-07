@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   SafeAreaView,
   useColorScheme,
   Keyboard
@@ -21,16 +20,19 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null); // State for error messages
+  const [success, setSuccess] = useState<string | null>(null); // State for success message
 
   const colorScheme = useColorScheme();
   const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
 
   const handleReset = async () => {
+    setError(null); // Reset error on new attempt
     if (password !== confirmPassword) {
-      return Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
+      return setError("Les mots de passe ne correspondent pas.");
     }
     if (password.length < 8) {
-      return Alert.alert("Erreur", "Le mot de passe doit contenir au moins 8 caractères.");
+      return setError("Le mot de passe doit contenir au moins 8 caractères.");
     }
 
     Keyboard.dismiss();
@@ -38,11 +40,14 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
 
     try {
       await resetPassword(API_BASE_URL, token, password);
-      Alert.alert("Succès", "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter.");
-      onPasswordResetSuccess();
+      setSuccess("Votre mot de passe a été réinitialisé !");
+      // We can call the success callback after a short delay to let the user read the message
+      setTimeout(() => {
+        onPasswordResetSuccess();
+      }, 3000); // 3 seconds delay
     } catch (error: any) {
       console.error("Password Reset Error:", error);
-      Alert.alert("Erreur", error.message || "Une erreur est survenue.");
+      setError(error.message || "Une erreur est survenue.");
     } finally {
       setLoading(false);
     }
@@ -53,42 +58,51 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
       <View style={styles.container}>
         <Text style={styles.title}>Réinitialiser le mot de passe</Text>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Nouveau mot de passe"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              placeholderTextColor={placeholderTextColor}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={22} color="#999" />
+        {success ? (
+          <View style={styles.messageContainer}>
+            <MaterialIcons name="check-circle" size={48} color="green" />
+            <Text style={styles.successText}>{success}</Text>
+          </View>
+        ) : (
+          <View style={styles.form}>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            <View style={styles.inputContainer}>
+              <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Nouveau mot de passe"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                placeholderTextColor={placeholderTextColor}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={22} color="#999" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirmer le mot de passe"
+                secureTextEntry={!showPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholderTextColor={placeholderTextColor}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleReset}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Réinitialiser</Text>}
             </TouchableOpacity>
           </View>
-
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmer le mot de passe"
-              secureTextEntry={!showPassword}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholderTextColor={placeholderTextColor}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleReset}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Réinitialiser</Text>}
-          </TouchableOpacity>
-        </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -126,4 +140,20 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { backgroundColor: "#ccc", shadowOpacity: 0 },
   buttonText: { color: "white", fontWeight: "bold", fontSize: 18 },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 15,
+    fontSize: 14,
+  },
+  successText: {
+    color: 'green',
+    textAlign: 'center',
+    fontSize: 18,
+    marginTop: 15,
+  },
+  messageContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  }
 });
