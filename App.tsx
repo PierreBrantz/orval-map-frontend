@@ -1,6 +1,6 @@
 // App.tsx
 import React, { useState, useEffect } from "react";
-import { ActivityIndicator, View, Modal, Platform, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { ActivityIndicator, View, Modal, Platform, Text, StyleSheet } from "react-native";
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
@@ -16,7 +16,7 @@ function AppContent() {
   const { isLoading, isLoginVisible, showLogin } = useAuth();
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword'>('login');
   const [resetToken, setResetToken] = useState<string | null>(null);
-  const [passwordResetSuccessWeb, setPasswordResetSuccessWeb] = useState(false); // Nouveau state pour le succès sur le web
+  const [passwordResetSuccessWeb, setPasswordResetSuccessWeb] = useState(false);
 
   const linking = {
     prefixes: [prefix],
@@ -36,7 +36,7 @@ function AppContent() {
         const token = queryParams.token as string;
         console.log("Reset token found:", token);
         setResetToken(token);
-        setPasswordResetSuccessWeb(false); // Réinitialiser l'état de succès si un nouveau token arrive
+        setPasswordResetSuccessWeb(false);
         if (Platform.OS !== 'web') {
           showLogin();
         }
@@ -56,22 +56,13 @@ function AppContent() {
     };
   }, [showLogin]);
 
-  // Logique spécifique pour le web pour afficher directement la page
+  // Logique spécifique pour le web
   if (Platform.OS === 'web') {
     if (passwordResetSuccessWeb) {
       return (
         <View style={webStyles.container}>
           <Text style={webStyles.title}>Mot de passe réinitialisé !</Text>
-          <Text style={webStyles.subtitle}>Vous pouvez maintenant fermer cet onglet ou vous connecter.</Text>
-          <TouchableOpacity
-            onPress={() => {
-              setPasswordResetSuccessWeb(false);
-              window.location.href = '/'; // Rediriger vers la page d'accueil (qui affichera la carte et la modale de login)
-            }}
-            style={webStyles.button}
-          >
-            <Text style={webStyles.buttonText}>Aller à la page de connexion</Text>
-          </TouchableOpacity>
+          <Text style={webStyles.subtitle}>Vous pouvez maintenant fermer cet onglet et vous connecter sur l'application mobile.</Text>
         </View>
       );
     }
@@ -81,7 +72,7 @@ function AppContent() {
           token={resetToken}
           onPasswordResetSuccess={() => {
             setResetToken(null);
-            setPasswordResetSuccessWeb(true); // Afficher la page de succès web
+            setPasswordResetSuccessWeb(true);
           }}
         />
       );
@@ -168,16 +159,5 @@ const webStyles = StyleSheet.create({
     color: '#666',
     marginBottom: 30,
     textAlign: 'center',
-  },
-  button: {
-    backgroundColor: '#ff8c00',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });
