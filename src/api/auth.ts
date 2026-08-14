@@ -12,7 +12,7 @@ export async function requestPasswordReset(baseUrl: string, email: string): Prom
   });
 
   if (!response.ok) {
-    console.error("Password reset request failed with status:", response.status);
+    // console.error("Password reset request failed with status:", response.status);
     throw new Error("Une erreur est survenue lors de la demande de réinitialisation.");
   }
 }
@@ -30,7 +30,7 @@ export async function resetPassword(baseUrl: string, token: string, newPassword:
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error("Password reset failed with status:", response.status, errorData);
+    // console.error("Password reset failed with status:", response.status, errorData);
     throw new Error(errorData.message || errorData.error || "Impossible de réinitialiser le mot de passe. Le lien est peut-être invalide ou expiré.");
   }
 }

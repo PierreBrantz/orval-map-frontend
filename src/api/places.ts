@@ -17,7 +17,19 @@ type PagedResponse<T> = {
   last: boolean;
 };
 
+// Helper pour les requêtes JSON
 async function authorizedFetch(input: RequestInfo, init: RequestInit = {}) {
+  const token = await AsyncStorage.getItem("jwtToken");
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...(init.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  return fetch(input, { ...init, headers });
+}
+
+// NOUVEAU helper pour les requêtes de fichiers (multipart/form-data)
+async function authorizedFetchMultipart(input: RequestInfo, init: RequestInit = {}) {
   const token = await AsyncStorage.getItem("jwtToken");
   const headers: HeadersInit = {
     ...(init.headers || {}),
@@ -34,7 +46,6 @@ export async function fetchPlaces(baseUrl: string, placeType: 'BAR' | 'RESTAURAN
     url += `&placeType=${placeType}`;
   }
 
-  // Only use cache if no specific placeType filter is applied and it's the first page
   if (page === 0 && !placeType) {
     const cached = await AsyncStorage.getItem(CACHE_KEY);
     if (cached) {
@@ -48,12 +59,40 @@ export async function fetchPlaces(baseUrl: string, placeType: 'BAR' | 'RESTAURAN
   const responseJson: PagedResponse<Place> = await res.json();
   const data = responseJson.content || [];
 
-  // Only cache if no specific placeType filter is applied and it's the first page
   if (page === 0 && !placeType) {
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
   }
   return data;
 }
+
+// --- PASSPORT API ---
+
+export async function visitPlace(baseUrl: string, placeId: number, coords: { lat: number; lng: number }): Promise<any> {
+  const body = JSON.stringify(coords);
+  console.log(`[DEBUG] Sending visit request for place ${placeId} with body:`, body); // <-- LOG DE DÉBOGAGE
+
+  const res = await authorizedFetch(`${baseUrl}/api/places/${placeId}/visit`, {
+    method: "POST",
+    body: body,
+  });
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`Erreur de visite: ${res.status} - ${errorBody}`);
+  }
+  return res.json();
+}
+
+export async function unvisitPlace(baseUrl: string, placeId: number): Promise<void> {
+  const res = await authorizedFetch(`${baseUrl}/api/places/${placeId}/visit`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`Erreur de suppression de visite: ${res.status} - ${errorBody}`);
+  }
+}
+
+// --- END PASSPORT API ---
 
 export async function uploadPlaceImage(baseUrl: string, placeId: number, localUri: string): Promise<string> {
   const endpoint = `${baseUrl}/api/places/${placeId}/upload-image`;
@@ -62,7 +101,9 @@ export async function uploadPlaceImage(baseUrl: string, placeId: number, localUr
   const match = /\.(\w+)$/.exec(filename);
   const type = match ? `image/${match[1]}` : `image`;
   formData.append('file', { uri: localUri, name: filename, type } as any);
-  const res = await authorizedFetch(endpoint, { method: 'POST', body: formData });
+
+  const res = await authorizedFetchMultipart(endpoint, { method: 'POST', body: formData });
+
   if (!res.ok) {
     const errorBody = await res.text();
     throw new Error(`Upload Error: ${res.status} - ${errorBody}`);
@@ -81,7 +122,9 @@ export async function uploadRequestImage(baseUrl: string, localUri: string): Pro
   const match = /\.(\w+)$/.exec(filename);
   const type = match ? `image/${match[1]}` : `image`;
   formData.append('file', { uri: localUri, name: filename, type } as any);
-  const res = await authorizedFetch(endpoint, { method: 'POST', body: formData });
+
+  const res = await authorizedFetchMultipart(endpoint, { method: 'POST', body: formData });
+
   if (!res.ok) {
     const errorBody = await res.text();
     throw new Error(`Upload Request Image Error: ${res.status} - ${errorBody}`);
@@ -97,7 +140,6 @@ export async function uploadRequestImage(baseUrl: string, localUri: string): Pro
 export async function suggestPlace(baseUrl: string, request: Omit<PlaceRequest, 'status'>): Promise<PlaceRequest> {
   const res = await authorizedFetch(`${baseUrl}/api/place-requests`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
   if (!res.ok) {
@@ -126,22 +168,9 @@ export async function validatePlaceRequest(baseUrl: string, id: number, approve:
   }
 }
 
-/** 🚀 Nouvel appel pour vérifier un lieu (confirmation communautaire) */
-export async function verifyPlace(baseUrl: string, placeId: number): Promise<Place> {
-  const res = await authorizedFetch(`${baseUrl}/api/places/${placeId}/verify`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Erreur vérification: ${res.status} - ${errorBody}`);
-  }
-  return res.json();
-}
-
 export async function updatePlace(baseUrl: string, place: Place): Promise<Place> {
   const res = await authorizedFetch(`${baseUrl}/api/places/${place.id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(place),
   });
   if (!res.ok) {
@@ -154,7 +183,6 @@ export async function updatePlace(baseUrl: string, place: Place): Promise<Place>
 export async function addPlace(baseUrl: string, place: Omit<Place, "id">): Promise<Place> {
   const res = await authorizedFetch(`${baseUrl}/api/places`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(place),
   });
   if (!res.ok) {

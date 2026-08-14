@@ -24,10 +24,27 @@ import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { API_BASE_URL } from "../config";
-import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggestPlace, fetchPlaceRequests, validatePlaceRequest, verifyPlace, deletePlace } from "../api/places";
+import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggestPlace, fetchPlaceRequests, validatePlaceRequest, visitPlace, unvisitPlace, deletePlace, clearPlacesCache } from "../api/places";
 import { useAuth } from "../context/AuthContext";
 import { Place, PlaceRequest } from "../types/Place";
 import Map from "../components/Map"; // Importation du composant abstrait
+
+// --- CONDITIONAL IMPORT ---
+// This will only import react-native-maps on mobile platforms
+let MapView, Marker, Region;
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  Region = maps.Region;
+} else {
+  // Provide dummy components for web to avoid crashing
+  MapView = (props) => <View {...props}><Text style={{textAlign: 'center', marginTop: 50}}>Map is not available on web.</Text></View>;
+  Marker = (props) => <View {...props} />;
+  Region = null;
+}
+// --- END CONDITIONAL IMPORT ---
+
 
 export default function MapScreen() {
   const [places, setPlaces] = useState<Place[]>([]);
@@ -49,7 +66,7 @@ export default function MapScreen() {
 
   const slideAnim = useRef(new Animated.Value(300)).current;
 
-  const { roles, username, logout, isGuest, showLogin } = useAuth();
+  const { roles, username, logout, isGuest, showLogin, visitedPlaceIds, addVisitedPlace, removeVisitedPlace } = useAuth();
 
   const colorScheme = useColorScheme();
   const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
@@ -68,6 +85,10 @@ export default function MapScreen() {
     return ownerName && ownerName.toLowerCase().trim() === username.toLowerCase().trim();
   };
 
+  const isPlaceVisited = (place: Place) => {
+    return visitedPlaceIds.has(place.id);
+  };
+
   useEffect(() => {
     if (isModalVisible) {
       setDisplayPriceString(editingPlace.price !== undefined ? String(editingPlace.price).replace('.', ',') : "");
@@ -80,7 +101,7 @@ export default function MapScreen() {
         const fetchedPlaces = await fetchPlaces(API_BASE_URL, selectedFilterType);
         setPlaces(fetchedPlaces);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to fetch places:", err);
       }
     };
     loadData();
@@ -99,7 +120,9 @@ export default function MapScreen() {
           return;
         }
         let location = await Location.getLastKnownPositionAsync({});
-        if (!location) location = await Location.getCurrentPositionAsync({});
+        if (!location) {
+          location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        }
         if (location) {
           setRegion({
             latitude: location.coords.latitude,
@@ -158,10 +181,45 @@ export default function MapScreen() {
     }
   };
 
+  const handleSuggestPress = async () => {
+    if (isGuest) {
+      Alert.alert(
+        "Connexion requise",
+        "Vous devez être connecté pour suggérer un nouveau café Orval.",
+        [{ text: "Plus tard", style: "cancel" }, { text: "Se connecter", onPress: showLogin }]
+      );
+      return;
+    }
+
+    Alert.alert("Géolocalisation", "Nous allons récupérer votre position actuelle pour plus de précision.");
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+        timeout: 15000,
+        maximumAge: 0,
+      });
+
+      setEditingPlace({
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+        placeType: 'BAR'
+      });
+      setIsModalVisible(true);
+
+    } catch (error) {
+      Alert.alert("Erreur de Géolocalisation", "Impossible de récupérer votre position. Veuillez vérifier que le GPS est activé.");
+    }
+  };
+
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return Alert.alert('Désolé', 'Permission requise !');
-    let result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 });
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7
+    });
     if (!result.canceled) setEditingPlace(p => ({ ...p, imageUrl: result.assets[0].uri }));
   };
 
@@ -182,7 +240,7 @@ export default function MapScreen() {
       let finalImageUrl = editingPlace.imageUrl;
       if (editingPlace.imageUrl && editingPlace.imageUrl.startsWith('file://')) {
         if (editingPlace.id) {
-          finalImageUrl = await uploadPlaceImage(API_BASE_URL, String(editingPlace.id), editingPlace.imageUrl);
+          finalImageUrl = await uploadPlaceImage(API_BASE_URL, editingPlace.id, editingPlace.imageUrl);
         } else {
           finalImageUrl = await uploadRequestImage(API_BASE_URL, editingPlace.imageUrl);
         }
@@ -197,14 +255,12 @@ export default function MapScreen() {
         const payload = {
           ...editingPlace,
           imageUrl: finalImageUrl,
-          lat: editingPlace.lat || region?.latitude || 0,
-          lng: editingPlace.lng || region?.longitude || 0,
-          placeType: editingPlace.placeType || 'BAR'
         };
         await suggestPlace(API_BASE_URL, payload as any);
         Alert.alert("Merci !", "Votre suggestion a été envoyée à l'admin.");
       }
       setIsModalVisible(false);
+      await clearPlacesCache();
     } catch (e: any) {
       Alert.alert("Erreur d'enregistrement", e.message || "Une erreur inconnue est survenue.");
     } finally {
@@ -226,28 +282,45 @@ export default function MapScreen() {
     try {
       await validatePlaceRequest(API_BASE_URL, id, approve);
       setPendingRequests(prev => prev.filter(r => r.id !== id));
-      if (approve) fetchPlaces(API_BASE_URL, selectedFilterType).then(setPlaces);
+      if (approve) {
+        await clearPlacesCache();
+        fetchPlaces(API_BASE_URL, selectedFilterType).then(setPlaces);
+      }
       Alert.alert("Ok", approve ? "Lieu ajouté !" : "Demande rejetée.");
     } catch (e: any) {
       Alert.alert("Erreur", "Action impossible.");
     }
   };
 
-  const handleVerifyPlace = async (place: Place) => {
+  const handleVisitToggle = async (place: Place) => {
     if (!place.id) return;
-    try {
-      const updatedPlace = await verifyPlace(API_BASE_URL, place.id);
-      setPlaces(prevPlaces =>
-        prevPlaces.map(p =>
-          p.id === updatedPlace.id ? { ...p, ...updatedPlace, hasUserVerified: true } : p
-        )
-      );
-      setSelectedPlace(prevSelected =>
-        prevSelected ? { ...prevSelected, ...updatedPlace, hasUserVerified: true } : null
-      );
-      Alert.alert("Santé !", `Merci d'avoir confirmé que l'on sert toujours de l'Orval à ${place.name}.`);
-    } catch (e: any) {
-      Alert.alert("Erreur", e.message || "Impossible de vérifier le lieu.");
+
+    if (isPlaceVisited(place)) {
+      Alert.alert("Retirer la visite", "Voulez-vous retirer ce lieu de votre passeport ?", [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Retirer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await unvisitPlace(API_BASE_URL, place.id);
+              removeVisitedPlace(place.id);
+            } catch (e: any) {
+              Alert.alert("Erreur", e.message || "Impossible de retirer la visite.");
+            }
+          },
+        },
+      ]);
+    } else {
+      try {
+        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        const coords = { lat: location.coords.latitude, lng: location.coords.longitude };
+        await visitPlace(API_BASE_URL, place.id, coords);
+        addVisitedPlace(place.id);
+        Alert.alert("Santé !", `${place.name} a été ajouté à votre passeport.`);
+      } catch (e: any) {
+        Alert.alert("Erreur", e.message || "Impossible d'ajouter la visite.");
+      }
     }
   };
 
@@ -261,6 +334,7 @@ export default function MapScreen() {
             await deletePlace(API_BASE_URL, placeId);
             setPlaces(prev => prev.filter(p => p.id !== placeId));
             setSelectedPlace(null);
+            await clearPlacesCache();
             Alert.alert("Succès", "Le café a été supprimé.");
           } catch (e: any) {
             Alert.alert("Erreur", e.message || "Impossible de supprimer le lieu.");
@@ -293,6 +367,7 @@ export default function MapScreen() {
         onMapPress={() => { setSelectedPlace(null); Keyboard.dismiss(); }}
         onMarkerPress={setSelectedPlace}
         isThisMyPlace={isThisMyPlace}
+        isPlaceVisited={isPlaceVisited}
       />
 
       <SafeAreaView style={styles.topContainer} pointerEvents="box-none">
@@ -330,14 +405,7 @@ export default function MapScreen() {
             <MaterialIcons name="notifications-active" size={20} color="white" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.sideBtn} onPress={() => {
-          if (isGuest) {
-            Alert.alert("Connexion requise", "Vous devez être connecté pour suggérer un nouveau café Orval.", [{ text: "Plus tard", style: "cancel" }, { text: "Se connecter", onPress: showLogin }]);
-          } else {
-            setEditingPlace({ placeType: 'BAR' });
-            setIsModalVisible(true);
-          }
-        }}>
+        <TouchableOpacity style={styles.sideBtn} onPress={handleSuggestPress}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons name="add-circle" size={18} color="white" />
             <Text style={{color: 'white', fontWeight: 'bold', marginLeft: 5}}>Suggérer</Text>
@@ -365,12 +433,11 @@ export default function MapScreen() {
               </TouchableOpacity>
               {!isGuest && selectedPlace.id && (
                 <TouchableOpacity
-                  style={[styles.editBtn, {backgroundColor: selectedPlace.hasUserVerified ? '#cccccc' : '#28a745'}]}
-                  onPress={() => handleVerifyPlace(selectedPlace)}
-                  disabled={selectedPlace.hasUserVerified}
+                  style={[styles.visitBtn, {backgroundColor: isPlaceVisited(selectedPlace) ? '#28a745' : '#ff8c00'}]}
+                  onPress={() => handleVisitToggle(selectedPlace)}
                 >
-                  <Ionicons name="shield-checkmark-outline" size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>{selectedPlace.hasUserVerified ? "Vérifié" : "Vérifier"}</Text>
+                  <Ionicons name={isPlaceVisited(selectedPlace) ? "checkmark-circle" : "beer"} size={18} color="white" style={{marginRight: 5}} />
+                  <Text style={styles.actionBtnText}>{isPlaceVisited(selectedPlace) ? "Déjà visité" : "Je l'ai visité"}</Text>
                 </TouchableOpacity>
               )}
               {(isAdmin || isThisMyPlace(selectedPlace)) && (
@@ -386,13 +453,6 @@ export default function MapScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.verificationContainer}>
-               <Ionicons name="ribbon-outline" size={16} color="#666" />
-               <Text style={styles.verificationText}>
-                 Vérifié {selectedPlace.verificationCount || 0} fois.
-                 {selectedPlace.lastVerificationDate ? ` Dernièrement le ${new Date(selectedPlace.lastVerificationDate).toLocaleDateString()}` : " Jamais vérifié."}
-               </Text>
-            </View>
           </>
         )}
       </Animated.View>
@@ -400,6 +460,9 @@ export default function MapScreen() {
       <Modal visible={isModalVisible} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <View style={styles.bottomSheet}>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setIsModalVisible(false)}>
+              <Ionicons name="close-circle" size={32} color="#ccc" />
+            </TouchableOpacity>
             <ScrollView contentContainerStyle={styles.modalScrollViewContent}>
               <Text style={styles.modalTitle}>{editingPlace.id ? "Modifier le lieu" : "Suggérer un lieu"}</Text>
               {!editingPlace.id && <Text style={styles.locationInfoText}>Votre position actuelle sera automatiquement utilisée. Veuillez être dans le lieu.</Text>}
@@ -490,12 +553,13 @@ const styles = StyleSheet.create({
   placeCity: { fontSize: 14, color: "#999", marginBottom: 10 },
   actionsContainer: { flexDirection: "row", marginTop: 15, gap: 8 },
   navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  visitBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
   actionBtnText: { color: "white", fontWeight: "bold" },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   bottomSheet: { backgroundColor: "white", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%", justifyContent: 'space-between', paddingTop: 20 },
-  modalScrollViewContent: { paddingHorizontal: 20, flexGrow: 1 },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ff8c00", marginBottom: 15 },
+  modalScrollViewContent: { paddingHorizontal: 20, flexGrow: 1, paddingTop: 20 },
+  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ff8c00", marginBottom: 15, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 10 },
   previewImage: { width: "100%", height: 150, borderRadius: 8, marginBottom: 10 },
   pickImageButton: { backgroundColor: "#eee", padding: 12, borderRadius: 8, flexDirection: 'row', justifyContent: "center", alignItems: "center", marginBottom: 15 },
@@ -523,4 +587,10 @@ const styles = StyleSheet.create({
   placeTypeButtonActive: { backgroundColor: '#ff8c00' },
   placeTypeButtonText: { color: '#666', fontWeight: 'bold' },
   placeTypeButtonTextActive: { color: 'white' },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+  },
 });

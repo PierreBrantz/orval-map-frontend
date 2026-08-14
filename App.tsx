@@ -3,14 +3,49 @@ import React, { useState, useEffect } from "react";
 import { ActivityIndicator, View, Modal, Platform, Text, StyleSheet } from "react-native";
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
+
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
 import MapScreen from "./src/screens/MapScreen";
+import PassportScreen from "./src/screens/PassportScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import UpdateChecker from "./src/components/UpdateChecker"; // Importer le composant
 
+const Tab = createBottomTabNavigator();
 const prefix = Linking.createURL('/');
+
+function AppTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'Carte') {
+            iconName = focused ? 'map' : 'map-outline';
+          } else if (route.name === 'Passeport') {
+            iconName = focused ? 'person-circle' : 'person-circle-outline';
+          } else if (route.name === 'Paramètres') {
+            iconName = focused ? 'settings' : 'settings-outline';
+          }
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#ff8c00',
+        tabBarInactiveTintColor: 'gray',
+        headerShown: false,
+      })}
+    >
+      <Tab.Screen name="Carte" component={MapScreen} />
+      <Tab.Screen name="Passeport" component={PassportScreen} />
+      <Tab.Screen name="Paramètres" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
 
 function AppContent() {
   const { isLoading, isLoginVisible, showLogin } = useAuth();
@@ -29,12 +64,9 @@ function AppContent() {
 
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
-      console.log("Deep link event received:", event.url);
       const { path, queryParams } = Linking.parse(event.url);
-
       if (path === 'reset-password' && queryParams?.token) {
         const token = queryParams.token as string;
-        console.log("Reset token found:", token);
         setResetToken(token);
         setPasswordResetSuccessWeb(false);
         if (Platform.OS !== 'web') {
@@ -42,21 +74,11 @@ function AppContent() {
         }
       }
     };
-
     const subscription = Linking.addEventListener('url', handleDeepLink);
-
-    Linking.getInitialURL().then(url => {
-      if (url) {
-        handleDeepLink({ url });
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    Linking.getInitialURL().then(url => url && handleDeepLink({ url }));
+    return () => subscription.remove();
   }, [showLogin]);
 
-  // Logique spécifique pour le web
   if (Platform.OS === 'web') {
     if (passwordResetSuccessWeb) {
       return (
@@ -88,7 +110,7 @@ function AppContent() {
   }
 
   const renderAuthContent = () => {
-    if (resetToken) {
+    if (resetToken && Platform.OS !== 'web') {
       return (
         <ResetPasswordScreen
           token={resetToken}
@@ -99,7 +121,6 @@ function AppContent() {
         />
       );
     }
-
     switch (authMode) {
       case 'register':
         return <RegisterScreen onSwitchToLogin={() => setAuthMode('login')} />;
@@ -117,15 +138,13 @@ function AppContent() {
   };
 
   return (
-    <>
-      <MapScreen />
-
-      {Platform.OS !== 'web' && (
-        <Modal visible={isLoginVisible} animationType="slide">
-          {renderAuthContent()}
-        </Modal>
-      )}
-    </>
+    <NavigationContainer linking={linking}>
+      <AppTabs />
+      <Modal visible={isLoginVisible} animationType="slide">
+        {renderAuthContent()}
+      </Modal>
+      <UpdateChecker />
+    </NavigationContainer>
   );
 }
 

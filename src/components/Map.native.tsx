@@ -4,7 +4,7 @@ import MapView, { Marker } from "react-native-maps";
 import { StyleSheet } from "react-native";
 
 // Ce composant reçoit toutes les props nécessaires depuis MapScreen
-export default function Map({ region, onRegionChangeComplete, places, onMapPress, onMarkerPress, isThisMyPlace }) {
+export default function Map({ region, onRegionChangeComplete, places, onMapPress, onMarkerPress, isPlaceVisited }) {
   return (
     <MapView
       style={StyleSheet.absoluteFill}
@@ -17,9 +17,9 @@ export default function Map({ region, onRegionChangeComplete, places, onMapPress
     >
       {places.map((p) => (
         <Marker
-          key={`${p.id}-${isThisMyPlace(p)}`}
+          key={p.id}
           coordinate={{ latitude: p.lat, longitude: p.lng }}
-          pinColor={isThisMyPlace(p) ? "green" : "red"}
+          pinColor={isPlaceVisited(p) ? "green" : "red"} // Correction: Utilise la fonction isPlaceVisited
           onPress={(e) => {
             e.stopPropagation();
             onMarkerPress(p);
