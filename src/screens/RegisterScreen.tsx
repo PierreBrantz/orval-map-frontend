@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/screens/RegisterScreen.tsx
 import React, { useState } from "react";
 import {
@@ -15,11 +16,12 @@ import {
   useColorScheme
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { API_BASE_URL } from "../config"; // Importer la constante
+import { API_BASE_URL, PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from "../config";
 import { useRegisterUser } from "../hooks/useRegisterUser";
 import { useAuth } from "../context/AuthContext";
 
 export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
+  const { t, errorMessage } = useLanguage();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,10 +44,10 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
     const cleanEmail = email.trim();
 
     if (!cleanUsername || !cleanEmail || !password) {
-      return Alert.alert("Erreur", "Tous les champs sont obligatoires.");
+      return Alert.alert(t("Erreur"), t("Tous les champs sont obligatoires."));
     }
     if (!validatePassword(password)) {
-      return Alert.alert("Mot de passe trop faible", "Votre mot de passe doit contenir au moins 8 caractères et au moins un chiffre.");
+      return Alert.alert(t("Mot de passe trop faible"), t("Votre mot de passe doit contenir au moins 8 caractères et au moins un chiffre."));
     }
 
     Keyboard.dismiss();
@@ -53,16 +55,16 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
     try {
       // Utiliser directement la constante API_BASE_URL
       await registerUser(API_BASE_URL, { username: cleanUsername, email: cleanEmail, password });
-      Alert.alert("Bienvenue !", "Votre compte a été créé avec succès.");
+      Alert.alert(t("Bienvenue !"), t("Votre compte a été créé avec succès."));
     } catch (e: any) {
-      Alert.alert("Erreur", e.message || "Impossible de créer le compte");
+      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de créer le compte"));
     } finally {
       setLoading(false);
     }
   };
 
-  const openTerms = () => Linking.openURL(`${API_BASE_URL.replace(/\/$/, "")}/terms.html`);
-  const openPrivacy = () => Linking.openURL(`${API_BASE_URL.replace(/\/$/, "")}/privacy.html`);
+  const openTerms = () => Linking.openURL(TERMS_OF_USE_URL);
+  const openPrivacy = () => Linking.openURL(PRIVACY_POLICY_URL);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
@@ -71,14 +73,14 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
           <MaterialIcons name="close" size={28} color="#999" />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Créer un compte 🍺</Text>
+        <Text style={styles.title}>{t("Créer un compte 🍺")}</Text>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <MaterialIcons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Nom d'utilisateur"
+              placeholder={t("Nom d'utilisateur")}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -90,7 +92,7 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
             <MaterialIcons name="email" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder={t("Email")}
               keyboardType="email-address"
               value={email}
               onChangeText={setEmail}
@@ -103,7 +105,7 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
             <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Mot de passe"
+              placeholder={t("Mot de passe")}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
@@ -114,18 +116,17 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.hintText}>Minimum 8 caractères et au moins 1 chiffre.</Text>
+          <Text style={styles.hintText}>{t("Minimum 8 caractères et au moins 1 chiffre.")}</Text>
 
           <Text style={styles.ageDisclaimerText}>
-            En créant un compte, vous confirmez avoir l'âge légal pour consommer de l'alcool dans votre pays.
-          </Text>
+            {t("En créant un compte, vous confirmez avoir l'âge légal pour consommer de l'alcool dans votre pays.")}{" "}</Text>
 
           <View style={styles.legalLinksContainer}>
             <TouchableOpacity onPress={openTerms}>
-              <Text style={styles.legalLinkText}>Conditions d'utilisation</Text>
+              <Text style={styles.legalLinkText}>{t("Conditions d'utilisation")}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={openPrivacy}>
-              <Text style={styles.legalLinkText}>Politique de confidentialité</Text>
+              <Text style={styles.legalLinkText}>{t("Politique de confidentialité")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -134,11 +135,11 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
             onPress={handleRegister}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>S'inscrire</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("S'inscrire")}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.switchButton} onPress={onSwitchToLogin}>
-            <Text style={styles.switchText}>Déjà un compte ? <Text style={styles.switchTextBold}>Se connecter</Text></Text>
+            <Text style={styles.switchText}>{t("Déjà un compte ?")}{" "}<Text style={styles.switchTextBold}>{t("Se connecter")}</Text></Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

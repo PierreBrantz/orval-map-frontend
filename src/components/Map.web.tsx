@@ -1,12 +1,14 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/components/Map.web.tsx
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 // Ce composant ignore les props de la carte et affiche un message
 export default function Map() {
+  const { t } = useLanguage();
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>La carte est uniquement disponible sur l'application mobile.</Text>
+      <Text style={styles.text}>{t("La carte est uniquement disponible sur l'application mobile.")}</Text>
     </View>
   );
 }

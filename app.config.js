@@ -6,7 +6,7 @@ module.exports = {
   expo: {
     name: "OrvalMaps",
     slug: "OrvalMaps",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -17,9 +17,31 @@ module.exports = {
       backgroundColor: "#ffffff"
     },
     ios: {
-      supportsTablet: true,
-      bundleIdentifier: "com.brantz.pierre.OrvalMaps"
+      supportsTablet: false,
+      bundleIdentifier: "com.orvalmaps.app",
+      infoPlist: {
+        NSLocationWhenInUseUsageDescription: "OrvalMaps utilise votre position pour afficher les lieux proches et valider vos visites.",
+        NSPhotoLibraryUsageDescription: "OrvalMaps accède à vos photos pour ajouter une image à un lieu.",
+        ITSAppUsesNonExemptEncryption: false
+      }
     },
+    plugins: [
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          photosPermission: "OrvalMaps accède à vos photos pour ajouter une image à un lieu.",
+          cameraPermission: false,
+          microphonePermission: false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          locationWhenInUsePermission: "OrvalMaps utilise votre position pour afficher les lieux proches et valider vos visites."
+        }
+      ]
+    ],
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/screens/ForgotPasswordScreen.tsx
 import React, { useState } from "react";
 import {
@@ -17,6 +18,7 @@ import { API_BASE_URL } from "../config";
 import { requestPasswordReset } from "../api/auth";
 
 export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +28,7 @@ export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLo
   const handlePasswordReset = async () => {
     const cleanEmail = email.trim();
     if (!cleanEmail) {
-      return Alert.alert("Erreur", "Veuillez entrer votre adresse e-mail.");
+      return Alert.alert(t("Erreur"), t("Veuillez entrer votre adresse e-mail."));
     }
 
     Keyboard.dismiss();
@@ -35,15 +37,15 @@ export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLo
     try {
       await requestPasswordReset(API_BASE_URL, cleanEmail);
       Alert.alert(
-        "Vérifiez vos e-mails",
-        "Si un compte est associé à cette adresse, un e-mail de réinitialisation a été envoyé."
+        t("Vérifiez vos e-mails"),
+        t("Si un compte est associé à cette adresse, un e-mail de réinitialisation a été envoyé.")
       );
       onSwitchToLogin();
     } catch (error: any) {
       console.error("Password Reset Error:", error);
       Alert.alert(
-        "Vérifiez vos e-mails",
-        "Si un compte est associé à cette adresse, un e-mail de réinitialisation a été envoyé."
+        t("Vérifiez vos e-mails"),
+        t("Si un compte est associé à cette adresse, un e-mail de réinitialisation a été envoyé.")
       );
       onSwitchToLogin();
     } finally {
@@ -58,17 +60,16 @@ export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLo
           <MaterialIcons name="arrow-back" size={28} color="#999" />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Mot de passe oublié</Text>
+        <Text style={styles.title}>{t("Mot de passe oublié")}</Text>
         <Text style={styles.subtitle}>
-          Entrez votre adresse e-mail pour recevoir un lien de réinitialisation.
-        </Text>
+          {t("Entrez votre adresse e-mail pour recevoir un lien de réinitialisation.")}{" "}</Text>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <MaterialIcons name="email" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Votre adresse e-mail"
+              placeholder={t("Votre adresse e-mail")}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -82,7 +83,7 @@ export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLo
             onPress={handlePasswordReset}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Envoyer</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("Envoyer")}</Text>}
           </TouchableOpacity>
         </View>
       </View>

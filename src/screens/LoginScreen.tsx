@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/screens/LoginScreen.tsx
 import React, { useState } from "react";
 import {
@@ -18,13 +19,14 @@ import { useLoginUser } from "../hooks/useLoginUser";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { onSwitchToRegister: () => void, onForgotPassword: () => void }) {
+  const { t, errorMessage } = useLanguage();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { loginUser } = useLoginUser();
-  const { hideLogin } = useAuth();
+  const { hideLogin, isLoginRequired } = useAuth();
 
   const colorScheme = useColorScheme();
   const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
@@ -32,7 +34,7 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
   const handleLogin = async () => {
     const cleanUsername = username.trim();
     if (!cleanUsername || !password) {
-      return Alert.alert("Erreur", "Veuillez remplir tous les champs");
+      return Alert.alert(t("Erreur"), t("Veuillez remplir tous les champs"));
     }
 
     Keyboard.dismiss();
@@ -40,7 +42,7 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
     try {
       await loginUser(API_BASE_URL, cleanUsername, password);
     } catch (e: any) {
-      Alert.alert("Erreur", e.message || "Impossible de se connecter");
+      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de se connecter"));
     } finally {
       setLoading(false);
     }
@@ -49,18 +51,20 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
       <View style={styles.container}>
-        <TouchableOpacity style={styles.closeButton} onPress={hideLogin}>
-          <MaterialIcons name="close" size={28} color="#999" />
-        </TouchableOpacity>
+        {!isLoginRequired && (
+          <TouchableOpacity style={styles.closeButton} onPress={hideLogin}>
+            <MaterialIcons name="close" size={28} color="#999" />
+          </TouchableOpacity>
+        )}
 
-        <Text style={styles.title}>Connexion 🍺</Text>
+        <Text style={styles.title}>{t("Connexion 🍺")}</Text>
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <MaterialIcons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Email ou Nom d'utilisateur"
+              placeholder={t("Email ou Nom d'utilisateur")}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -72,7 +76,7 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
             <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Mot de passe"
+              placeholder={t("Mot de passe")}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
@@ -84,7 +88,7 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
           </View>
 
           <TouchableOpacity style={styles.forgotPasswordButton} onPress={onForgotPassword}>
-            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+            <Text style={styles.forgotPasswordText}>{t("Mot de passe oublié ?")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -92,11 +96,11 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Se connecter</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("Se connecter")}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.switchButton} onPress={onSwitchToRegister}>
-            <Text style={styles.switchText}>Pas de compte ? <Text style={styles.switchTextBold}>S'inscrire</Text></Text>
+            <Text style={styles.switchText}>{t("Pas de compte ?")}{" "}<Text style={styles.switchTextBold}>{t("S'inscrire")}</Text></Text>
           </TouchableOpacity>
         </View>
       </View>

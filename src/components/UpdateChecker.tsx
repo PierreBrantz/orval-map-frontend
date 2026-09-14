@@ -1,8 +1,8 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/components/UpdateChecker.tsx
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Linking, Platform } from 'react-native';
 import * as Application from 'expo-application';
-import { API_BASE_URL } from '../config';
 import { fetchVersionInfo } from '../api/version';
 
 // Fonction pour comparer les versions (ex: "1.2.0" > "1.1.0")
@@ -19,6 +19,7 @@ const isVersionOutdated = (currentVersion: string, requiredVersion: string) => {
 };
 
 const UpdateChecker = () => {
+  const { t } = useLanguage();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; isForced: boolean } | null>(null);
 
@@ -30,7 +31,7 @@ const UpdateChecker = () => {
       if (!currentVersion) return;
 
       try {
-        const versionInfo = await fetchVersionInfo(API_BASE_URL);
+        const versionInfo = await fetchVersionInfo();
         const { latestVersion, minimumVersion } = versionInfo.android;
 
         const isForced = isVersionOutdated(currentVersion, minimumVersion);
@@ -69,19 +70,19 @@ const UpdateChecker = () => {
       <View style={styles.overlay}>
         <View style={styles.modalContent}>
           <Text style={styles.title}>
-            {updateInfo.isForced ? "Mise à jour obligatoire" : "Nouvelle version disponible"}
+            {updateInfo.isForced ? t("Mise à jour obligatoire") : t("Nouvelle version disponible")}
           </Text>
           <Text style={styles.description}>
             {updateInfo.isForced
-              ? `Votre version de l'application n'est plus compatible. Veuillez installer la version ${updateInfo.latestVersion} pour continuer.`
-              : `Une nouvelle version (${updateInfo.latestVersion}) d'OrvalMaps est disponible avec des améliorations et de nouvelles fonctionnalités.`}
+              ? t("Votre version de l'application n'est plus compatible. Veuillez installer la version {version} pour continuer.", { version: updateInfo.latestVersion })
+              : t("Une nouvelle version ({version}) d'OrvalMaps est disponible avec des améliorations et de nouvelles fonctionnalités.", { version: updateInfo.latestVersion })}
           </Text>
           <TouchableOpacity style={styles.updateButton} onPress={handleUpdatePress}>
-            <Text style={styles.buttonText}>Mettre à jour</Text>
+            <Text style={styles.buttonText}>{t("Mettre à jour")}</Text>
           </TouchableOpacity>
           {!updateInfo.isForced && (
             <TouchableOpacity style={styles.laterButton} onPress={() => setIsModalVisible(false)}>
-              <Text style={styles.laterButtonText}>Plus tard</Text>
+              <Text style={styles.laterButtonText}>{t("Plus tard")}</Text>
             </TouchableOpacity>
           )}
         </View>

@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/screens/ResetPasswordScreen.tsx
 import React, { useState } from "react";
 import {
@@ -16,6 +17,7 @@ import { API_BASE_URL } from "../config";
 import { resetPassword } from "../api/auth";
 
 export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: { token: string, onPasswordResetSuccess: () => void }) {
+  const { t, errorMessage } = useLanguage();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,10 +31,10 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
   const handleReset = async () => {
     setError(null); // Reset error on new attempt
     if (password !== confirmPassword) {
-      return setError("Les mots de passe ne correspondent pas.");
+      return setError(t("Les mots de passe ne correspondent pas."));
     }
     if (password.length < 8) {
-      return setError("Le mot de passe doit contenir au moins 8 caractères.");
+      return setError(t("Le mot de passe doit contenir au moins 8 caractères."));
     }
 
     Keyboard.dismiss();
@@ -40,14 +42,14 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
 
     try {
       await resetPassword(API_BASE_URL, token, password);
-      setSuccess("Votre mot de passe a été réinitialisé !");
+      setSuccess(t("Votre mot de passe a été réinitialisé !"));
       // We can call the success callback after a short delay to let the user read the message
       setTimeout(() => {
         onPasswordResetSuccess();
       }, 3000); // 3 seconds delay
     } catch (error: any) {
       console.error("Password Reset Error:", error);
-      setError(error.message || "Une erreur est survenue.");
+      setError(errorMessage(error, "Une erreur est survenue."));
     } finally {
       setLoading(false);
     }
@@ -56,7 +58,7 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
       <View style={styles.container}>
-        <Text style={styles.title}>Réinitialiser le mot de passe</Text>
+        <Text style={styles.title}>{t("Réinitialiser le mot de passe")}</Text>
 
         {success ? (
           <View style={styles.messageContainer}>
@@ -71,7 +73,7 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
               <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Nouveau mot de passe"
+                placeholder={t("Nouveau mot de passe")}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
@@ -86,7 +88,7 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
               <MaterialIcons name="lock-outline" size={20} color="#999" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Confirmer le mot de passe"
+                placeholder={t("Confirmer le mot de passe")}
                 secureTextEntry={!showPassword}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -99,7 +101,7 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
               onPress={handleReset}
               disabled={loading}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Réinitialiser</Text>}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t("Réinitialiser")}</Text>}
             </TouchableOpacity>
           </View>
         )}

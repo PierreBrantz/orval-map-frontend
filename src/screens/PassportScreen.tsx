@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 // src/screens/PassportScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, FlatList, Modal } from 'react-native';
@@ -7,19 +8,21 @@ import { API_BASE_URL } from '../config';
 import { fetchPassportData, fetchVisitedPlaces, PassportData, VisitedPlacesData } from '../api/passport';
 import { Ionicons } from '@expo/vector-icons';
 
-const badgeRules = [
-  { title: "Badges de Découverte", description: "Basés sur le nombre de lieux différents visités." },
-  { name: "Première découverte", condition: "1 lieu visité" },
-  { name: "Explorateur", condition: "5 lieux visités" },
-  { name: "Aventurier", condition: "10 lieux visités" },
-  { name: "Connaisseur", condition: "25 lieux visités" },
-  { name: "Grand explorateur", condition: "50 lieux visités" },
-  { title: "Badges de Contribution", description: "Basés sur le nombre de vos suggestions de lieux qui ont été validées." },
-  { name: "Éclaireur", condition: "1 suggestion validée" },
-  { name: "Cartographe", condition: "5 suggestions validées" },
-];
+
 
 export default function PassportScreen() {
+  const { t, translateText } = useLanguage();
+  const badgeRules = [
+    { title: t("Badges de Découverte"), description: t("Basés sur le nombre de lieux différents visités.") },
+    { name: t("Première découverte"), condition: t("1 lieu visité") },
+    { name: t("Explorateur"), condition: t("5 lieux visités") },
+    { name: t("Aventurier"), condition: t("10 lieux visités") },
+    { name: t("Connaisseur"), condition: t("25 lieux visités") },
+    { name: t("Grand explorateur"), condition: t("50 lieux visités") },
+    { title: t("Badges de Contribution"), description: t("Basés sur le nombre de vos suggestions de lieux qui ont été validées.") },
+    { name: t("Éclaireur"), condition: t("1 suggestion validée") },
+    { name: t("Cartographe"), condition: t("5 suggestions validées") },
+  ];
   const { isGuest, showLogin, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [passportData, setPassportData] = useState<PassportData | null>(null);
@@ -56,9 +59,9 @@ export default function PassportScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Text style={styles.loginPrompt}>Connectez-vous pour voir votre passeport.</Text>
+          <Text style={styles.loginPrompt}>{t("Connectez-vous pour voir votre passeport.")}</Text>
           <TouchableOpacity style={styles.loginButton} onPress={showLogin}>
-            <Text style={styles.loginButtonText}>Se connecter</Text>
+            <Text style={styles.loginButtonText}>{t("Se connecter")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -79,7 +82,7 @@ export default function PassportScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Text>{error || "Impossible de charger les données."}</Text>
+          <Text>{(error && translateText(error)) || t("Impossible de charger les données.")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -91,23 +94,23 @@ export default function PassportScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Mon Passeport Orval</Text>
+        <Text style={styles.title}>{t("Mon Passeport Orval")}</Text>
         <Text style={styles.username}>{user?.username}</Text>
 
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{passportData.visitedPlaces}</Text>
-            <Text style={styles.statLabel}>Lieux découverts</Text>
+            <Text style={styles.statLabel}>{t("Lieux découverts")}</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{passportData.visitedCities}</Text>
-            <Text style={styles.statLabel}>Villes explorées</Text>
+            <Text style={styles.statLabel}>{t("Villes explorées")}</Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Prochain Objectif</Text>
-          <Text style={styles.goalText}>Objectif : {nextGoal.name}</Text>
+          <Text style={styles.sectionTitle}>{t("Prochain Objectif")}</Text>
+          <Text style={styles.goalText}>{t("Objectif :")}{" "}{translateText(nextGoal.name)}</Text>
           <View style={styles.progressBarBackground}>
             <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
           </View>
@@ -116,7 +119,7 @@ export default function PassportScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Badges</Text>
+            <Text style={styles.sectionTitle}>{t("Badges")}</Text>
             <TouchableOpacity onPress={() => setIsRulesModalVisible(true)}>
               <Ionicons name="information-circle-outline" size={24} color="#666" />
             </TouchableOpacity>
@@ -125,24 +128,24 @@ export default function PassportScreen() {
             {passportData.badges.map((badge, index) => (
               <View key={index} style={styles.badge}>
                 <Ionicons name={badge.unlocked ? "shield-checkmark" : "shield-outline"} size={24} color={badge.unlocked ? "#ff8c00" : "#ccc"} />
-                <Text style={[styles.badgeName, !badge.unlocked && styles.badgeNameLocked]}>{badge.name}</Text>
+                <Text style={[styles.badgeName, !badge.unlocked && styles.badgeNameLocked]}>{translateText(badge.name)}</Text>
               </View>
             ))}
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mes Contributions</Text>
+          <Text style={styles.sectionTitle}>{t("Mes Contributions")}</Text>
           <View style={styles.contributions}>
-            <Text>Total : {passportData.suggestions.total}</Text>
-            <Text style={{color: 'green'}}>✓ {passportData.suggestions.approved} validées</Text>
-            <Text style={{color: 'orange'}}>⏳ {passportData.suggestions.pending} en attente</Text>
+            <Text>{t("Total :")}{" "}{passportData.suggestions.total}</Text>
+            <Text style={{color: 'green'}}>✓ {passportData.suggestions.approved} {t("validées")}</Text>
+            <Text style={{color: 'orange'}}>⏳ {passportData.suggestions.pending} {t("en attente")}</Text>
           </View>
         </View>
 
         {visitedPlaces && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Mes Découvertes ({visitedPlaces.count})</Text>
+            <Text style={styles.sectionTitle}>{t("Mes Découvertes ({count})", { count: visitedPlaces.count })}</Text>
             <FlatList
               data={visitedPlaces.places}
               keyExtractor={(item) => item.id.toString()}
@@ -166,7 +169,7 @@ export default function PassportScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Règles des Badges</Text>
+            <Text style={styles.modalTitle}>{t("Règles des Badges")}</Text>
             <FlatList
               data={badgeRules}
               keyExtractor={(item, index) => index.toString()}
@@ -182,7 +185,7 @@ export default function PassportScreen() {
               )}
             />
             <TouchableOpacity style={styles.closeButton} onPress={() => setIsRulesModalVisible(false)}>
-              <Text style={styles.closeButtonText}>Fermer</Text>
+              <Text style={styles.closeButtonText}>{t("Fermer")}</Text>
             </TouchableOpacity>
           </View>
         </View>

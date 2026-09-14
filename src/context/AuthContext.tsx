@@ -1,14 +1,16 @@
 // src/context/AuthContext.tsx
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { jwtDecode } from 'jwt-decode';
-import { API_BASE_URL } from '../config';
+import { setUnauthorizedHandler } from '../api/api';
 import { fetchVisitedPlaces } from '../api/passport';
+import { API_BASE_URL } from '../config';
 
 interface User {
   sub: string;
   roles: string[];
   username: string;
+  exp: number;
 }
 
 interface AuthContextType {
@@ -18,9 +20,12 @@ interface AuthContextType {
   isGuest: boolean;
   isLoading: boolean;
   isLoginVisible: boolean;
-  visitedPlaceIds: Set<number>; // Ensemble des IDs des lieux visités
+  isLoginRequired: boolean;
+  visitedPlaceIds: Set<number>;
   login: (token: string) => void;
   logout: () => void;
+  finishAccountDeletion: () => Promise<void>;
+  navigationVersion: number;
   showLogin: () => void;
   hideLogin: () => void;
   addVisitedPlace: (placeId: number) => void;
@@ -33,48 +38,84 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoginVisible, setIsLoginVisible] = useState(false);
+  const [isLoginRequired, setIsLoginRequired] = useState(false);
   const [visitedPlaceIds, setVisitedPlaceIds] = useState<Set<number>>(new Set());
+  const [navigationVersion, setNavigationVersion] = useState(0);
+  const sessionVersion = useRef(0);
 
-  const fetchAndSetVisitedPlaces = async () => {
-    try {
-      const visitsData = await fetchVisitedPlaces(API_BASE_URL);
-      // Correction: Utiliser 'places' au lieu de 'bars'
-      if (visitsData && Array.isArray(visitsData.places)) {
-        const ids = new Set(visitsData.places.map(place => place.id));
-        setVisitedPlaceIds(ids);
-      } else {
-        console.warn("La réponse de l'API des lieux visités n'a pas le format attendu.", visitsData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch visited places on login:", error);
-    }
+  const finishAccountDeletion = async () => {
+    // These are the only persisted account-related keys. Keep the device's language preference.
+    await AsyncStorage.multiRemove(['jwtToken', 'orval_places_cache_v1', 'orval_places_cache_v2']);
+    sessionVersion.current++;
+    setUser(null);
+    setVisitedPlaceIds(new Set());
+    setIsLoginRequired(true);
+    setIsLoginVisible(true);
+    setNavigationVersion(version => version + 1);
+  };
+
+  const logout = async () => {
+    await AsyncStorage.removeItem('jwtToken');
+    sessionVersion.current++;
+    setUser(null);
+    setVisitedPlaceIds(new Set());
+  };
+
+  const requireLogin = async () => {
+    await logout();
+    setIsLoginRequired(true);
+    setIsLoginVisible(true);
   };
 
   useEffect(() => {
+    // Configurer le gestionnaire pour les erreurs 401
+    setUnauthorizedHandler(requireLogin);
+
     const loadUserFromStorage = async () => {
       const token = await AsyncStorage.getItem('jwtToken');
       if (token) {
-        const decodedUser: User = jwtDecode(token);
-        setUser(decodedUser);
-        await fetchAndSetVisitedPlaces(); // Charger les visites après avoir chargé l'utilisateur
+        try {
+          const decodedUser: User = jwtDecode(token);
+          // Vérifier si le token est expiré
+          if (decodedUser.exp * 1000 < Date.now()) {
+            await requireLogin();
+          } else {
+            setUser(decodedUser);
+            await fetchAndSetVisitedPlaces();
+          }
+        } catch (e) {
+          await requireLogin();
+        }
       }
       setIsLoading(false);
     };
     loadUserFromStorage();
   }, []);
 
-  const login = async (token: string) => {
-    await AsyncStorage.setItem('jwtToken', token);
-    const decodedUser: User = jwtDecode(token);
-    setUser(decodedUser);
-    setIsLoginVisible(false);
-    await fetchAndSetVisitedPlaces(); // Recharger les visites après une nouvelle connexion
+  const fetchAndSetVisitedPlaces = async () => {
+    const version = sessionVersion.current;
+    try {
+      const visitsData = await fetchVisitedPlaces(API_BASE_URL);
+      if (version === sessionVersion.current && visitsData && Array.isArray(visitsData.places)) {
+        const ids = new Set(visitsData.places.map(place => place.id));
+        setVisitedPlaceIds(ids);
+      }
+    } catch (error) {
+      // L'erreur 401 sera déjà gérée par l'intercepteur, pas besoin de faire plus ici
+    }
   };
 
-  const logout = async () => {
-    await AsyncStorage.removeItem('jwtToken');
-    setUser(null);
-    setVisitedPlaceIds(new Set()); // Vider les visites à la déconnexion
+  const login = async (token: string) => {
+    const decodedUser: User = jwtDecode(token);
+    if (!decodedUser.exp || decodedUser.exp * 1000 <= Date.now()) {
+      throw new Error('Le jeton de connexion est invalide ou expiré.');
+    }
+
+    await AsyncStorage.setItem('jwtToken', token);
+    setUser(decodedUser);
+    setIsLoginRequired(false);
+    setIsLoginVisible(false);
+    await fetchAndSetVisitedPlaces();
   };
 
   const addVisitedPlace = (placeId: number) => {
@@ -97,11 +138,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isGuest: !user,
       isLoading,
       isLoginVisible,
+      isLoginRequired,
       visitedPlaceIds,
       login,
       logout,
-      showLogin: () => setIsLoginVisible(true),
-      hideLogin: () => setIsLoginVisible(false),
+      finishAccountDeletion,
+      navigationVersion,
+      showLogin: () => {
+        setIsLoginRequired(false);
+        setIsLoginVisible(true);
+      },
+      hideLogin: () => {
+        if (!isLoginRequired) setIsLoginVisible(false);
+      },
       addVisitedPlace,
       removeVisitedPlace
     }}>

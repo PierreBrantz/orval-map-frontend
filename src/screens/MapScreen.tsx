@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/LanguageContext";
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -28,25 +29,11 @@ import { fetchPlaces, updatePlace, uploadPlaceImage, uploadRequestImage, suggest
 import { useAuth } from "../context/AuthContext";
 import { Place, PlaceRequest } from "../types/Place";
 import Map from "../components/Map"; // Importation du composant abstrait
-
-// --- CONDITIONAL IMPORT ---
-// This will only import react-native-maps on mobile platforms
-let MapView, Marker, Region;
-if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  Region = maps.Region;
-} else {
-  // Provide dummy components for web to avoid crashing
-  MapView = (props) => <View {...props}><Text style={{textAlign: 'center', marginTop: 50}}>Map is not available on web.</Text></View>;
-  Marker = (props) => <View {...props} />;
-  Region = null;
-}
-// --- END CONDITIONAL IMPORT ---
+import type { Region } from "react-native-maps";
 
 
 export default function MapScreen() {
+  const { t, errorMessage, language } = useLanguage();
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
@@ -60,7 +47,7 @@ export default function MapScreen() {
 
   const [searchText, setSearchText] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [region, setRegion] = useState<any | undefined>(undefined);
+  const [region, setRegion] = useState<Region | undefined>(undefined);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [selectedFilterType, setSelectedFilterType] = useState<'BAR' | 'RESTAURANT' | 'BREWERY' | null>(null);
 
@@ -96,15 +83,17 @@ export default function MapScreen() {
   }, [isModalVisible, editingPlace.price]);
 
   useEffect(() => {
+    let active = true;
     const loadData = async () => {
       try {
         const fetchedPlaces = await fetchPlaces(API_BASE_URL, selectedFilterType);
-        setPlaces(fetchedPlaces);
+        if (active) setPlaces(fetchedPlaces);
       } catch (err) {
         console.error("Failed to fetch places:", err);
       }
     };
     loadData();
+    return () => { active = false; };
   }, [username, selectedFilterType]);
 
   useEffect(() => {
@@ -159,7 +148,7 @@ export default function MapScreen() {
       ios: `http://maps.apple.com/?daddr=${place.lat},${place.lng}`,
       android: `google.navigation:q=${place.lat},${place.lng}`
     });
-    if (url) Linking.openURL(url).catch(() => Alert.alert("Erreur", "Navigation impossible."));
+    if (url) Linking.openURL(url).catch(() => Alert.alert(t("Erreur"), t("Navigation impossible.")));
   };
 
   const handleSearchCity = async () => {
@@ -172,10 +161,10 @@ export default function MapScreen() {
         const { latitude, longitude } = geocoded[0];
         setRegion({ latitude, longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 });
       } else {
-        Alert.alert("Introuvable", "Aucune ville trouvée.");
+        Alert.alert(t("Introuvable"), t("Aucune ville trouvée."));
       }
     } catch (error) {
-      Alert.alert("Erreur", "Recherche impossible.");
+      Alert.alert(t("Erreur"), t("Recherche impossible."));
     } finally {
       setIsSearching(false);
     }
@@ -184,19 +173,17 @@ export default function MapScreen() {
   const handleSuggestPress = async () => {
     if (isGuest) {
       Alert.alert(
-        "Connexion requise",
-        "Vous devez être connecté pour suggérer un nouveau café Orval.",
-        [{ text: "Plus tard", style: "cancel" }, { text: "Se connecter", onPress: showLogin }]
+        t("Connexion requise"),
+        t("Vous devez être connecté pour suggérer un nouveau café Orval."),
+        [{ text: t("Plus tard"), style: "cancel" }, { text: t("Se connecter"), onPress: showLogin }]
       );
       return;
     }
 
-    Alert.alert("Géolocalisation", "Nous allons récupérer votre position actuelle pour plus de précision.");
+    Alert.alert(t("Géolocalisation"), t("Nous allons récupérer votre position actuelle pour plus de précision."));
     try {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Highest,
-        timeout: 15000,
-        maximumAge: 0,
       });
 
       setEditingPlace({
@@ -207,13 +194,13 @@ export default function MapScreen() {
       setIsModalVisible(true);
 
     } catch (error) {
-      Alert.alert("Erreur de Géolocalisation", "Impossible de récupérer votre position. Veuillez vérifier que le GPS est activé.");
+      Alert.alert(t("Erreur de Géolocalisation"), t("Impossible de récupérer votre position. Veuillez vérifier que le GPS est activé."));
     }
   };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return Alert.alert('Désolé', 'Permission requise !');
+    if (status !== 'granted') return Alert.alert(t("Désolé"), t("Permission requise !"));
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -250,19 +237,19 @@ export default function MapScreen() {
         const saved = await updatePlace(API_BASE_URL, { ...editingPlace, imageUrl: finalImageUrl } as Place);
         setPlaces(prev => prev.map(p => p.id === saved.id ? saved : p));
         setSelectedPlace(saved);
-        Alert.alert("Succès", "Lieu mis à jour !");
+        Alert.alert(t("Succès"), t("Lieu mis à jour !"));
       } else {
         const payload = {
           ...editingPlace,
           imageUrl: finalImageUrl,
         };
         await suggestPlace(API_BASE_URL, payload as any);
-        Alert.alert("Merci !", "Votre suggestion a été envoyée à l'admin.");
+        Alert.alert(t("Merci !"), t("Votre suggestion a été envoyée à l'admin."));
       }
       setIsModalVisible(false);
       await clearPlacesCache();
     } catch (e: any) {
-      Alert.alert("Erreur d'enregistrement", e.message || "Une erreur inconnue est survenue.");
+      Alert.alert(t("Erreur d'enregistrement"), errorMessage(e, "Une erreur inconnue est survenue."));
     } finally {
       setIsUploading(false);
     }
@@ -274,7 +261,7 @@ export default function MapScreen() {
       setPendingRequests(requests);
       setIsAdminPanelVisible(true);
     } catch (e: any) {
-      Alert.alert("Erreur Admin", e.message || "Une erreur inconnue est survenue.");
+      Alert.alert(t("Erreur Admin"), errorMessage(e, "Une erreur inconnue est survenue."));
     }
   };
 
@@ -286,9 +273,9 @@ export default function MapScreen() {
         await clearPlacesCache();
         fetchPlaces(API_BASE_URL, selectedFilterType).then(setPlaces);
       }
-      Alert.alert("Ok", approve ? "Lieu ajouté !" : "Demande rejetée.");
+      Alert.alert(t("Ok"), approve ? t("Lieu ajouté !") : t("Demande rejetée."));
     } catch (e: any) {
-      Alert.alert("Erreur", "Action impossible.");
+      Alert.alert(t("Erreur"), t("Action impossible."));
     }
   };
 
@@ -296,48 +283,50 @@ export default function MapScreen() {
     if (!place.id) return;
 
     if (isPlaceVisited(place)) {
-      Alert.alert("Retirer la visite", "Voulez-vous retirer ce lieu de votre passeport ?", [
-        { text: "Annuler", style: "cancel" },
+      Alert.alert(t("Retirer la visite"), t("Voulez-vous retirer ce lieu de votre passeport ?"), [
+        { text: t("Annuler"), style: "cancel" },
         {
-          text: "Retirer",
+          text: t("Retirer"),
           style: "destructive",
           onPress: async () => {
             try {
               await unvisitPlace(API_BASE_URL, place.id);
               removeVisitedPlace(place.id);
             } catch (e: any) {
-              Alert.alert("Erreur", e.message || "Impossible de retirer la visite.");
+              Alert.alert(t("Erreur"), errorMessage(e, "Impossible de retirer la visite."));
             }
           },
         },
       ]);
     } else {
       try {
-        const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest,
+        });
         const coords = { lat: location.coords.latitude, lng: location.coords.longitude };
         await visitPlace(API_BASE_URL, place.id, coords);
         addVisitedPlace(place.id);
-        Alert.alert("Santé !", `${place.name} a été ajouté à votre passeport.`);
+        Alert.alert(t("Santé !"), t("{name} a été ajouté à votre passeport.", { name: place.name }));
       } catch (e: any) {
-        Alert.alert("Erreur", e.message || "Impossible d'ajouter la visite.");
+        Alert.alert(t("Erreur"), errorMessage(e, "Impossible d'ajouter la visite. Assurez-vous d'être assez proche du lieu."));
       }
     }
   };
 
   const handleDeletePlace = async (placeId: number) => {
-    Alert.alert("Confirmation", "Êtes-vous sûr de vouloir supprimer ce café ?", [
-      { text: "Annuler", style: "cancel" },
+    Alert.alert(t("Confirmation"), t("Êtes-vous sûr de vouloir supprimer ce café ?"), [
+      { text: t("Annuler"), style: "cancel" },
       {
-        text: "Supprimer", style: "destructive",
+        text: t("Supprimer"), style: "destructive",
         onPress: async () => {
           try {
             await deletePlace(API_BASE_URL, placeId);
             setPlaces(prev => prev.filter(p => p.id !== placeId));
             setSelectedPlace(null);
             await clearPlacesCache();
-            Alert.alert("Succès", "Le café a été supprimé.");
+            Alert.alert(t("Succès"), t("Le café a été supprimé."));
           } catch (e: any) {
-            Alert.alert("Erreur", e.message || "Impossible de supprimer le lieu.");
+            Alert.alert(t("Erreur"), errorMessage(e, "Impossible de supprimer le lieu."));
           }
         },
       },
@@ -346,9 +335,9 @@ export default function MapScreen() {
 
   const getPlaceTypeDisplayName = (placeType: 'BAR' | 'RESTAURANT' | 'BREWERY') => {
     switch (placeType) {
-      case 'BAR': return 'Bar';
-      case 'RESTAURANT': return 'Restaurant';
-      case 'BREWERY': return 'Brasserie';
+      case 'BAR': return t("Bar");
+      case 'RESTAURANT': return t("Restaurant");
+      case 'BREWERY': return t("Brasserie");
       default: return '';
     }
   };
@@ -373,7 +362,7 @@ export default function MapScreen() {
       <SafeAreaView style={styles.topContainer} pointerEvents="box-none">
         <View style={styles.topControlsRow}>
           <View style={styles.searchBarContainer}>
-            <TextInput style={styles.searchInput} placeholder="Ville..." value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchCity} placeholderTextColor={placeholderTextColor} />
+            <TextInput style={styles.searchInput} placeholder={t("Ville...")} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchCity} placeholderTextColor={placeholderTextColor} />
             <TouchableOpacity style={styles.iconButton} onPress={handleSearchCity}>
               {isSearching ? <ActivityIndicator size="small" color="#ff8c00" /> : <Ionicons name="search" size={20} color="#666" />}
             </TouchableOpacity>
@@ -385,16 +374,16 @@ export default function MapScreen() {
 
         <View style={styles.filterButtonsContainer}>
           <TouchableOpacity style={[styles.filterButton, selectedFilterType === null && styles.filterButtonActive]} onPress={() => setSelectedFilterType(null)}>
-            <Text style={[styles.filterButtonText, selectedFilterType === null && styles.filterButtonTextActive]}>Tous</Text>
+            <Text style={[styles.filterButtonText, selectedFilterType === null && styles.filterButtonTextActive]}>{t("Tous")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'BAR' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('BAR')}>
-            <Text style={[styles.filterButtonText, selectedFilterType === 'BAR' && styles.filterButtonTextActive]}>Bars</Text>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'BAR' && styles.filterButtonTextActive]}>{t("Bars")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'RESTAURANT' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('RESTAURANT')}>
-            <Text style={[styles.filterButtonText, selectedFilterType === 'RESTAURANT' && styles.filterButtonTextActive]}>Restaurants</Text>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'RESTAURANT' && styles.filterButtonTextActive]}>{t("Restaurants")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.filterButton, selectedFilterType === 'BREWERY' && styles.filterButtonActive]} onPress={() => setSelectedFilterType('BREWERY')}>
-            <Text style={[styles.filterButtonText, selectedFilterType === 'BREWERY' && styles.filterButtonTextActive]}>Brasseries</Text>
+            <Text style={[styles.filterButtonText, selectedFilterType === 'BREWERY' && styles.filterButtonTextActive]}>{t("Brasseries")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -408,7 +397,7 @@ export default function MapScreen() {
         <TouchableOpacity style={styles.sideBtn} onPress={handleSuggestPress}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons name="add-circle" size={18} color="white" />
-            <Text style={{color: 'white', fontWeight: 'bold', marginLeft: 5}}>Suggérer</Text>
+            <Text style={{color: 'white', fontWeight: 'bold', marginLeft: 5}}>{t("Suggérer")}</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -420,7 +409,7 @@ export default function MapScreen() {
             <View style={styles.panelHeader}>
               <View>
                 <Text style={styles.placeTitle}>{selectedPlace.name}</Text>
-                {selectedPlace.price && <Text style={styles.priceTag}>🍺 Orval: {selectedPlace.price}€</Text>}
+                {selectedPlace.price != null && <Text style={styles.priceTag}>🍺 Orval: {new Intl.NumberFormat(language, { style: "currency", currency: "EUR" }).format(selectedPlace.price)}</Text>}
                 {selectedPlace.placeType && <Text style={styles.placeTypeTag}>{getPlaceTypeDisplayName(selectedPlace.placeType)}</Text>}
               </View>
               <TouchableOpacity onPress={() => setSelectedPlace(null)}><Ionicons name="close" size={24} color="#999" /></TouchableOpacity>
@@ -429,7 +418,7 @@ export default function MapScreen() {
             <View style={styles.actionsContainer}>
               <TouchableOpacity style={styles.navigateBtn} onPress={() => handleNavigation(selectedPlace)}>
                 <Ionicons name="navigate" size={18} color="white" style={{marginRight: 5}} />
-                <Text style={styles.actionBtnText}>Y Aller</Text>
+                <Text style={styles.actionBtnText}>{t("Y Aller")}</Text>
               </TouchableOpacity>
               {!isGuest && selectedPlace.id && (
                 <TouchableOpacity
@@ -437,19 +426,19 @@ export default function MapScreen() {
                   onPress={() => handleVisitToggle(selectedPlace)}
                 >
                   <Ionicons name={isPlaceVisited(selectedPlace) ? "checkmark-circle" : "beer"} size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>{isPlaceVisited(selectedPlace) ? "Déjà visité" : "Je l'ai visité"}</Text>
+                  <Text style={styles.actionBtnText}>{isPlaceVisited(selectedPlace) ? t("Déjà visité") : t("Je l'ai visité")}</Text>
                 </TouchableOpacity>
               )}
               {(isAdmin || isThisMyPlace(selectedPlace)) && (
                 <TouchableOpacity style={styles.editBtn} onPress={() => { setEditingPlace(selectedPlace); setIsModalVisible(true); }}>
                   <Ionicons name="create" size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>Editer</Text>
+                  <Text style={styles.actionBtnText}>{t("Editer")}</Text>
                 </TouchableOpacity>
               )}
               {isAdmin && selectedPlace.id && (
                 <TouchableOpacity style={[styles.editBtn, {backgroundColor: '#dc3545'}]} onPress={() => handleDeletePlace(selectedPlace.id!)}>
                   <Ionicons name="trash" size={18} color="white" style={{marginRight: 5}} />
-                  <Text style={styles.actionBtnText}>Supprimer</Text>
+                  <Text style={styles.actionBtnText}>{t("Supprimer")}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -464,39 +453,39 @@ export default function MapScreen() {
               <Ionicons name="close-circle" size={32} color="#ccc" />
             </TouchableOpacity>
             <ScrollView contentContainerStyle={styles.modalScrollViewContent}>
-              <Text style={styles.modalTitle}>{editingPlace.id ? "Modifier le lieu" : "Suggérer un lieu"}</Text>
-              {!editingPlace.id && <Text style={styles.locationInfoText}>Votre position actuelle sera automatiquement utilisée. Veuillez être dans le lieu.</Text>}
+              <Text style={styles.modalTitle}>{editingPlace.id ? t("Modifier le lieu") : t("Suggérer un lieu")}</Text>
+              {!editingPlace.id && <Text style={styles.locationInfoText}>{t("Votre position actuelle sera automatiquement utilisée. Veuillez être dans le lieu.")}</Text>}
               {editingPlace.imageUrl && <Image source={{ uri: editingPlace.imageUrl }} style={styles.previewImage} />}
               <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
                 <Ionicons name="camera" size={20} color="#666" style={{marginRight: 8}} />
-                <Text>Photo du lieu</Text>
+                <Text>{t("Photo du lieu")}</Text>
               </TouchableOpacity>
-              <TextInput style={styles.input} value={editingPlace.name} onChangeText={t => setEditingPlace(p => ({...p, name: t}))} placeholder="Nom du lieu" placeholderTextColor={placeholderTextColor} />
-              <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder="Ville" placeholderTextColor={placeholderTextColor} />
-              <TextInput style={styles.input} value={displayPriceString} keyboardType="decimal-pad" onChangeText={handlePriceInputChange} placeholder="Prix de l'Orval (€)" placeholderTextColor={placeholderTextColor} />
-              <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder="Infos (ex: stock, ambiance...)" multiline placeholderTextColor={placeholderTextColor} />
+              <TextInput style={styles.input} value={editingPlace.name} onChangeText={t => setEditingPlace(p => ({...p, name: t}))} placeholder={t("Nom du lieu")} placeholderTextColor={placeholderTextColor} />
+              <TextInput style={styles.input} value={editingPlace.city} onChangeText={t => setEditingPlace(p => ({...p, city: t}))} placeholder={t("Ville")} placeholderTextColor={placeholderTextColor} />
+              <TextInput style={styles.input} value={displayPriceString} keyboardType="decimal-pad" onChangeText={handlePriceInputChange} placeholder={t("Prix de l'Orval (€)")} placeholderTextColor={placeholderTextColor} />
+              <TextInput style={[styles.input, { height: 60 }]} value={editingPlace.description} onChangeText={t => setEditingPlace(p => ({...p, description: t}))} placeholder={t("Infos (ex: stock, ambiance...)")} multiline placeholderTextColor={placeholderTextColor} />
               <View style={styles.placeTypeSelectorContainer}>
-                <Text style={styles.placeTypeSelectorLabel}>Type de lieu:</Text>
+                <Text style={styles.placeTypeSelectorLabel}>{t("Type de lieu:")}</Text>
                 <View style={styles.placeTypeButtons}>
                   <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'BAR' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'BAR' }))}>
-                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BAR' && styles.placeTypeButtonTextActive]}>Bar</Text>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BAR' && styles.placeTypeButtonTextActive]}>{t("Bar")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'RESTAURANT' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'RESTAURANT' }))}>
-                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'RESTAURANT' && styles.placeTypeButtonTextActive]}>Restaurant</Text>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'RESTAURANT' && styles.placeTypeButtonTextActive]}>{t("Restaurant")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.placeTypeButton, editingPlace.placeType === 'BREWERY' && styles.placeTypeButtonActive]} onPress={() => setEditingPlace(p => ({ ...p, placeType: 'BREWERY' }))}>
-                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BREWERY' && styles.placeTypeButtonTextActive]}>Brasserie</Text>
+                    <Text style={[styles.placeTypeButtonText, editingPlace.placeType === 'BREWERY' && styles.placeTypeButtonTextActive]}>{t("Brasserie")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-              <Text style={styles.contentDisclaimerText}>Les utilisateurs sont responsables du contenu qu'ils publient.</Text>
-              <Text style={styles.contentDisclaimerText}>OrvalMaps peut supprimer tout contenu inapproprié.</Text>
+              <Text style={styles.contentDisclaimerText}>{t("Les utilisateurs sont responsables du contenu qu'ils publient.")}</Text>
+              <Text style={styles.contentDisclaimerText}>{t("OrvalMaps peut supprimer tout contenu inapproprié.")}</Text>
             </ScrollView>
             <View style={styles.modalFixedButtonsContainer}>
               <TouchableOpacity style={styles.saveButton} onPress={handleSavePlace} disabled={isUploading}>
-                {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>Envoyer</Text>}
+                {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>{t("Envoyer")}</Text>}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setIsModalVisible(false)}><Text style={styles.cancelButtonText}>Annuler</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setIsModalVisible(false)}><Text style={styles.cancelButtonText}>{t("Annuler")}</Text></TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -505,7 +494,7 @@ export default function MapScreen() {
       <Modal visible={isAdminPanelVisible} animationType="fade">
         <SafeAreaView style={{flex: 1, backgroundColor: 'white'}}>
           <View style={{padding: 20, flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#eee'}}>
-            <Text style={styles.modalTitle}>Demandes en attente</Text>
+            <Text style={styles.modalTitle}>{t("Demandes en attente")}</Text>
             <TouchableOpacity onPress={() => setIsAdminPanelVisible(false)}><Ionicons name="close" size={28} color="#333" /></TouchableOpacity>
           </View>
           <FlatList
@@ -517,15 +506,15 @@ export default function MapScreen() {
                 <Text style={{fontWeight: 'bold', fontSize: 18}}>{item.name}</Text>
                 <Text>📍 {item.city}</Text>
                 <Text>Lat: {item.lat?.toFixed(4)}, Lng: {item.lng?.toFixed(4)}</Text>
-                <Text>🍺 Prix Orval: {item.price}€</Text>
-                {item.placeType && <Text>Type: {getPlaceTypeDisplayName(item.placeType)}</Text>}
+                <Text>{t("🍺 Prix Orval:")}{" "}{item.price != null ? new Intl.NumberFormat(language, { style: "currency", currency: "EUR" }).format(item.price) : "—"}</Text>
+                {item.placeType && <Text>{t("Type:")}{" "}{getPlaceTypeDisplayName(item.placeType)}</Text>}
                 <View style={{flexDirection: 'row', marginTop: 15}}>
-                  <TouchableOpacity style={styles.approveBtn} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>Valider</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleValidate(item.id!, false)}><Text style={{color: 'white', fontWeight: 'bold'}}>Refuser</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.approveBtn} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Valider")}</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleValidate(item.id!, false)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Refuser")}</Text></TouchableOpacity>
                 </View>
               </View>
             )}
-            ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 50, color: '#999'}}>Aucune demande en attente.</Text>}
+            ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 50, color: '#999'}}>{t("Aucune demande en attente.")}</Text>}
           />
         </SafeAreaView>
       </Modal>
@@ -551,11 +540,11 @@ const styles = StyleSheet.create({
   priceTag: { color: '#ff8c00', fontWeight: 'bold', fontSize: 16 },
   placeTypeTag: { fontSize: 14, color: '#666', marginTop: 5 },
   placeCity: { fontSize: 14, color: "#999", marginBottom: 10 },
-  actionsContainer: { flexDirection: "row", marginTop: 15, gap: 8 },
-  navigateBtn: { flex: 1, backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
-  visitBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
-  editBtn: { flex: 1, backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
-  actionBtnText: { color: "white", fontWeight: "bold" },
+  actionsContainer: { flexDirection: "row", flexWrap: "wrap", marginTop: 15, gap: 8 },
+  navigateBtn: { flexGrow: 1, flexBasis: "45%", backgroundColor: "#ff8c00", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  visitBtn: { flexGrow: 1, flexBasis: "45%", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  editBtn: { flexGrow: 1, flexBasis: "45%", backgroundColor: "#666", padding: 12, borderRadius: 8, alignItems: "center", flexDirection: 'row', justifyContent: 'center' },
+  actionBtnText: { flexShrink: 1, textAlign: "center", color: "white", fontWeight: "bold" },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   bottomSheet: { backgroundColor: "white", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%", justifyContent: 'space-between', paddingTop: 20 },
   modalScrollViewContent: { paddingHorizontal: 20, flexGrow: 1, paddingTop: 20 },
@@ -576,16 +565,16 @@ const styles = StyleSheet.create({
   cancelButton: { marginTop: 10, alignItems: 'center', paddingVertical: 10 },
   cancelButtonText: { color: '#999', fontSize: 16, fontWeight: 'bold' },
   filterButtonsContainer: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'white', borderRadius: 15, padding: 3, marginTop: 5, elevation: 3, width: '100%' },
-  filterButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12 },
+  filterButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 12 },
   filterButtonActive: { backgroundColor: '#ff8c00' },
-  filterButtonText: { color: '#666', fontWeight: 'bold', fontSize: 12 },
+  filterButtonText: { textAlign: 'center', color: '#666', fontWeight: 'bold', fontSize: 12 },
   filterButtonTextActive: { color: 'white' },
   placeTypeSelectorContainer: { marginTop: 10, marginBottom: 15 },
   placeTypeSelectorLabel: { fontSize: 16, fontWeight: 'bold', marginBottom: 8, color: '#333' },
   placeTypeButtons: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#f0f0f0', borderRadius: 10, padding: 5 },
   placeTypeButton: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   placeTypeButtonActive: { backgroundColor: '#ff8c00' },
-  placeTypeButtonText: { color: '#666', fontWeight: 'bold' },
+  placeTypeButtonText: { textAlign: 'center', color: '#666', fontWeight: 'bold' },
   placeTypeButtonTextActive: { color: 'white' },
   modalCloseButton: {
     position: 'absolute',

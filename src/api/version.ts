@@ -1,4 +1,5 @@
 // src/api/version.ts
+import { API_BASE_URL } from '../config';
 
 export interface VersionInfo {
   android: {
@@ -7,9 +8,9 @@ export interface VersionInfo {
   };
 }
 
-export async function fetchVersionInfo(baseUrl: string): Promise<VersionInfo> {
-  // Cet appel est public, pas besoin de token d'authentification
-  const response = await fetch(`${baseUrl}/api/version`);
+export async function fetchVersionInfo(): Promise<VersionInfo> {
+  // Cet appel est public, pas besoin de authenticatedFetch
+  const response = await fetch(`${API_BASE_URL}/api/version`);
   if (!response.ok) {
     throw new Error("Impossible de récupérer les informations de version.");
   }
