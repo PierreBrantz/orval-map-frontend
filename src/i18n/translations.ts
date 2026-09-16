@@ -1,6 +1,11 @@
 // Each entry contains English, Dutch, Italian and German, in that order.
 // French source strings are also the stable lookup keys and fallback language.
 export const translations = {
+  "Suggestions validées": ["Approved suggestions", "Goedgekeurde suggesties", "Suggerimenti approvati", "Genehmigte Vorschläge"],
+  "En attente": ["Pending", "In afwachting", "In attesa", "Ausstehend"],
+  "Refusées": ["Rejected", "Afgewezen", "Rifiutati", "Abgelehnt"],
+  "Cette suggestion a déjà été traitée.": ["This suggestion has already been processed.", "Deze suggestie is al verwerkt.", "Questo suggerimento è già stato elaborato.", "Dieser Vorschlag wurde bereits bearbeitet."],
+  "La décision est enregistrée, mais le rafraîchissement a échoué. Rouvrez la liste pour réessayer.": ["The decision was saved, but refreshing failed. Reopen the list to try again.", "De beslissing is opgeslagen, maar vernieuwen is mislukt. Open de lijst opnieuw om het nogmaals te proberen.", "La decisione è stata salvata, ma l'aggiornamento non è riuscito. Riapri l'elenco per riprovare.", "Die Entscheidung wurde gespeichert, aber die Aktualisierung ist fehlgeschlagen. Öffne die Liste erneut, um es noch einmal zu versuchen."],
   "Mot de passe actuel": ["Current password", "Huidig wachtwoord", "Password attuale", "Aktuelles Passwort"],
   "Veuillez saisir votre mot de passe.": ["Please enter your password.", "Voer je wachtwoord in.", "Inserisci la tua password.", "Bitte gib dein Passwort ein."],
   "Le mot de passe est incorrect.": ["The password is incorrect.", "Het wachtwoord is onjuist.", "La password non è corretta.", "Das Passwort ist falsch."],

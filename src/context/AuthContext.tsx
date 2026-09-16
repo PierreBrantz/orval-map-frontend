@@ -26,6 +26,8 @@ interface AuthContextType {
   logout: () => void;
   finishAccountDeletion: () => Promise<void>;
   navigationVersion: number;
+  passportRevision: number;
+  refreshPassport: () => void;
   showLogin: () => void;
   hideLogin: () => void;
   addVisitedPlace: (placeId: number) => void;
@@ -41,6 +43,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoginRequired, setIsLoginRequired] = useState(false);
   const [visitedPlaceIds, setVisitedPlaceIds] = useState<Set<number>>(new Set());
   const [navigationVersion, setNavigationVersion] = useState(0);
+  const [passportRevision, setPassportRevision] = useState(0);
   const sessionVersion = useRef(0);
 
   const finishAccountDeletion = async () => {
@@ -144,6 +147,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       logout,
       finishAccountDeletion,
       navigationVersion,
+      passportRevision,
+      refreshPassport: () => setPassportRevision(revision => revision + 1),
       showLogin: () => {
         setIsLoginRequired(false);
         setIsLoginVisible(true);

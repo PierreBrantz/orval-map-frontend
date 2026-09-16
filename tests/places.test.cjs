@@ -21,7 +21,7 @@ function setup(pages, cached) {
       const body = pages[page];
       if (body instanceof Error) throw body;
       assert.ok(body, `Unexpected page ${page}`);
-      return { ok: true, json: async () => body };
+      return { ok: !body.status, status: body.status ?? 200, json: async () => body, text: async () => 'Server error' };
     },
   };
   const exports = {};
@@ -69,4 +69,11 @@ test('a server repeating the same page cannot cause an endless download', async 
   const client = setup([{ content: [{ id: 1 }] }, { content: [{ id: 1 }] }]);
   await assert.rejects(client.fetchPlaces(''), /pagination did not advance/);
   assert.equal(client.writes.length, 0);
+});
+
+test('moderation conflicts are distinguished from generic server failures', async () => {
+  const conflict = setup([{ status: 409 }]);
+  await assert.rejects(conflict.validatePlaceRequest('', 12, false), { message: 'Cette suggestion a déjà été traitée.' });
+  const failure = setup([{ status: 500 }]);
+  await assert.rejects(failure.validatePlaceRequest('', 12, true), /Erreur validation: 500/);
 });

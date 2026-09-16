@@ -2,14 +2,17 @@
 import { authenticatedFetch } from './api';
 import { Place } from "../types/Place";
 
+export interface SuggestionsStats {
+  total: number; // Approved + pending; rejected suggestions do not count.
+  approved: number;
+  pending: number;
+  rejected?: number; // Optional while older backends are still deployed.
+}
+
 export interface PassportData {
   visitedPlaces: number;
   visitedCities: number;
-  suggestions: {
-    total: number;
-    approved: number;
-    pending: number;
-  };
+  suggestions: SuggestionsStats;
   nextGoal: {
     name: string;
     current: number;

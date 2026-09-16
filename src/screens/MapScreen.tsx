@@ -40,6 +40,8 @@ export default function MapScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isAdminPanelVisible, setIsAdminPanelVisible] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PlaceRequest[]>([]);
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
+  const processingRequest = useRef(false);
 
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({});
   const [isUploading, setIsUploading] = useState(false);
@@ -53,7 +55,7 @@ export default function MapScreen() {
 
   const slideAnim = useRef(new Animated.Value(300)).current;
 
-  const { roles, username, logout, isGuest, showLogin, visitedPlaceIds, addVisitedPlace, removeVisitedPlace } = useAuth();
+  const { roles, username, logout, isGuest, showLogin, visitedPlaceIds, addVisitedPlace, removeVisitedPlace, refreshPassport } = useAuth();
 
   const colorScheme = useColorScheme();
   const placeholderTextColor = colorScheme === 'dark' ? '#888' : '#bbb';
@@ -266,16 +268,32 @@ export default function MapScreen() {
   };
 
   const handleValidate = async (id: number, approve: boolean) => {
+    if (processingRequest.current) return;
+    processingRequest.current = true;
+    setIsProcessingRequest(true);
+    let decisionSaved = false;
     try {
       await validatePlaceRequest(API_BASE_URL, id, approve);
+      decisionSaved = true;
       setPendingRequests(prev => prev.filter(r => r.id !== id));
-      if (approve) {
-        await clearPlacesCache();
-        fetchPlaces(API_BASE_URL, selectedFilterType).then(setPlaces);
-      }
+      refreshPassport();
+      await Promise.all([
+        fetchPlaceRequests(API_BASE_URL).then(setPendingRequests),
+        approve ? clearPlacesCache().then(() => fetchPlaces(API_BASE_URL, selectedFilterType)).then(setPlaces) : Promise.resolve(),
+      ]);
       Alert.alert(t("Ok"), approve ? t("Lieu ajouté !") : t("Demande rejetée."));
     } catch (e: any) {
-      Alert.alert(t("Erreur"), t("Action impossible."));
+      if (e instanceof Error && e.message === 'Cette suggestion a déjà été traitée.') {
+        setPendingRequests(prev => prev.filter(r => r.id !== id));
+        refreshPassport();
+        await fetchPlaceRequests(API_BASE_URL).then(setPendingRequests).catch(() => undefined);
+      }
+      Alert.alert(t("Erreur"), decisionSaved
+        ? t('La décision est enregistrée, mais le rafraîchissement a échoué. Rouvrez la liste pour réessayer.')
+        : errorMessage(e, 'Action impossible.'));
+    } finally {
+      processingRequest.current = false;
+      setIsProcessingRequest(false);
     }
   };
 
@@ -509,8 +527,8 @@ export default function MapScreen() {
                 <Text>{t("🍺 Prix Orval:")}{" "}{item.price != null ? new Intl.NumberFormat(language, { style: "currency", currency: "EUR" }).format(item.price) : "—"}</Text>
                 {item.placeType && <Text>{t("Type:")}{" "}{getPlaceTypeDisplayName(item.placeType)}</Text>}
                 <View style={{flexDirection: 'row', marginTop: 15}}>
-                  <TouchableOpacity style={styles.approveBtn} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Valider")}</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleValidate(item.id!, false)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Refuser")}</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.approveBtn} disabled={isProcessingRequest} onPress={() => handleValidate(item.id!, true)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Valider")}</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.rejectBtn} disabled={isProcessingRequest} onPress={() => handleValidate(item.id!, false)}><Text style={{color: 'white', fontWeight: 'bold'}}>{t("Refuser")}</Text></TouchableOpacity>
                 </View>
               </View>
             )}

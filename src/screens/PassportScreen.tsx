@@ -23,7 +23,7 @@ export default function PassportScreen() {
     { name: t("Éclaireur"), condition: t("1 suggestion validée") },
     { name: t("Cartographe"), condition: t("5 suggestions validées") },
   ];
-  const { isGuest, showLogin, user } = useAuth();
+  const { isGuest, showLogin, user, passportRevision } = useAuth();
   const [loading, setLoading] = useState(true);
   const [passportData, setPassportData] = useState<PassportData | null>(null);
   const [visitedPlaces, setVisitedPlaces] = useState<VisitedPlacesData | null>(null);
@@ -31,29 +31,33 @@ export default function PassportScreen() {
   const [isRulesModalVisible, setIsRulesModalVisible] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    setPassportData(null);
+    setVisitedPlaces(null);
     if (!isGuest) {
       const loadData = async () => {
         setLoading(true);
         setError(null);
         try {
           const passport = await fetchPassportData(API_BASE_URL);
-          setPassportData(passport);
+          if (active) setPassportData(passport);
         } catch (e) {
-          setError("Impossible de charger les données du passeport.");
+          if (active) setError("Impossible de charger les données du passeport.");
         }
 
         try {
           const visits = await fetchVisitedPlaces(API_BASE_URL);
-          setVisitedPlaces(visits);
+          if (active) setVisitedPlaces(visits);
         } catch (e) {
           // Ne pas bloquer l'affichage si seulement cet appel échoue
         }
 
-        setLoading(false);
+        if (active) setLoading(false);
       };
       loadData();
     }
-  }, [isGuest]);
+    return () => { active = false; };
+  }, [isGuest, user?.sub, passportRevision]);
 
   if (isGuest) {
     return (
@@ -137,9 +141,9 @@ export default function PassportScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("Mes Contributions")}</Text>
           <View style={styles.contributions}>
-            <Text>{t("Total :")}{" "}{passportData.suggestions.total}</Text>
-            <Text style={{color: 'green'}}>✓ {passportData.suggestions.approved} {t("validées")}</Text>
-            <Text style={{color: 'orange'}}>⏳ {passportData.suggestions.pending} {t("en attente")}</Text>
+            <Text style={{color: 'green'}}>{t('Suggestions validées')} : {passportData.suggestions.approved}</Text>
+            <Text style={{color: '#996300'}}>{t('En attente')} : {passportData.suggestions.pending}</Text>
+            <Text style={{color: '#c62828'}}>{t('Refusées')} : {passportData.suggestions.rejected ?? 0}</Text>
           </View>
         </View>
 

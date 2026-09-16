@@ -143,6 +143,7 @@ export async function validatePlaceRequest(baseUrl: string, id: number, approve:
     method: "POST",
   });
   if (!res.ok) {
+    if (res.status === 409) throw new Error('Cette suggestion a déjà été traitée.');
     const errorBody = await res.text();
     throw new Error(`Erreur validation: ${res.status} - ${errorBody}`);
   }
