@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, View } from 'react-native';
-import { Language, languages, translate, translations, TranslationKey } from '../i18n/translations';
+import { Language, languages, translate, TranslationKey } from '../i18n/translations';
+import { getErrorMessage } from '../api/errors';
 
 export const LANGUAGE_STORAGE_KEY = 'orvalmaps.language';
 interface LanguageContextValue {
@@ -38,8 +39,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const t = useCallback((key: TranslationKey, params?: Record<string, string | number>) => translate(language, key, params), [language]);
   const translateText = useCallback((value: string) => translate(language, value), [language]);
   const errorMessage = useCallback((error: unknown, fallback: TranslationKey) => {
-    const message = error instanceof Error ? error.message : '';
-    return translate(language, Object.prototype.hasOwnProperty.call(translations, message) ? message : fallback);
+    return getErrorMessage(language, error, fallback);
   }, [language]);
   if (!ready) return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color="#ff8c00" /></View>;
   return <LanguageContext.Provider value={{ language, setLanguage, t, translateText, errorMessage }}>{children}</LanguageContext.Provider>;

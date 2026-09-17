@@ -10,6 +10,7 @@ function load(file, dependencies) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React, esModuleInterop: true },
   }).outputText;
   new Function('require', 'exports', code)(name => {
+    if (name === './errors') return require('./helpers/errors.cjs');
     assert.ok(name in dependencies, `Unexpected import ${name}`);
     return dependencies[name];
   }, exports);

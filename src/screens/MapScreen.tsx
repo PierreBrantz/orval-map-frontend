@@ -35,6 +35,8 @@ import type { Region } from "react-native-maps";
 export default function MapScreen() {
   const { t, errorMessage, language } = useLanguage();
   const [places, setPlaces] = useState<Place[]>([]);
+  const [placesError, setPlacesError] = useState<unknown>(null);
+  const [placesRetry, setPlacesRetry] = useState(0);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -87,16 +89,17 @@ export default function MapScreen() {
   useEffect(() => {
     let active = true;
     const loadData = async () => {
+      setPlacesError(null);
       try {
         const fetchedPlaces = await fetchPlaces(API_BASE_URL, selectedFilterType);
         if (active) setPlaces(fetchedPlaces);
       } catch (err) {
-        console.error("Failed to fetch places:", err);
+        if (active) setPlacesError(err);
       }
     };
     loadData();
     return () => { active = false; };
-  }, [username, selectedFilterType]);
+  }, [username, selectedFilterType, placesRetry]);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -150,7 +153,7 @@ export default function MapScreen() {
       ios: `http://maps.apple.com/?daddr=${place.lat},${place.lng}`,
       android: `google.navigation:q=${place.lat},${place.lng}`
     });
-    if (url) Linking.openURL(url).catch(() => Alert.alert(t("Erreur"), t("Navigation impossible.")));
+    if (url) Linking.openURL(url).catch(() => Alert.alert(t("Erreur"), t("Impossible d’ouvrir l’itinéraire. Vérifiez qu’une application de navigation est installée.")));
   };
 
   const handleSearchCity = async () => {
@@ -163,10 +166,10 @@ export default function MapScreen() {
         const { latitude, longitude } = geocoded[0];
         setRegion({ latitude, longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 });
       } else {
-        Alert.alert(t("Introuvable"), t("Aucune ville trouvée."));
+        Alert.alert(t("Introuvable"), t("Aucune ville trouvée. Vérifiez le nom ou ajoutez le pays à votre recherche."));
       }
     } catch (error) {
-      Alert.alert(t("Erreur"), t("Recherche impossible."));
+      Alert.alert(t("Erreur"), t("Impossible de rechercher cette ville. Vérifiez votre connexion et réessayez."));
     } finally {
       setIsSearching(false);
     }
@@ -201,15 +204,19 @@ export default function MapScreen() {
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return Alert.alert(t("Désolé"), t("Permission requise !"));
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7
-    });
-    if (!result.canceled) setEditingPlace(p => ({ ...p, imageUrl: result.assets[0].uri }));
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return Alert.alert(t("Photo du lieu"), t('Autorisez l’accès aux photos dans les paramètres de votre appareil, puis réessayez.'));
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7
+      });
+      if (!result.canceled) setEditingPlace(p => ({ ...p, imageUrl: result.assets[0].uri }));
+    } catch (error) {
+      Alert.alert(t('Photo du lieu'), errorMessage(error, 'Impossible d’ouvrir vos photos. Réessayez depuis le formulaire.'));
+    }
   };
 
   const handlePriceInputChange = (text: string) => {
@@ -251,7 +258,7 @@ export default function MapScreen() {
       setIsModalVisible(false);
       await clearPlacesCache();
     } catch (e: any) {
-      Alert.alert(t("Erreur d'enregistrement"), errorMessage(e, "Une erreur inconnue est survenue."));
+      Alert.alert(t("Erreur d'enregistrement"), errorMessage(e, 'Impossible d’enregistrer ce lieu. Vérifiez les informations saisies et réessayez.'));
     } finally {
       setIsUploading(false);
     }
@@ -263,7 +270,7 @@ export default function MapScreen() {
       setPendingRequests(requests);
       setIsAdminPanelVisible(true);
     } catch (e: any) {
-      Alert.alert(t("Erreur Admin"), errorMessage(e, "Une erreur inconnue est survenue."));
+      Alert.alert(t("Demandes en attente"), errorMessage(e, 'Impossible de charger les suggestions. Fermez cette fenêtre et réessayez.'));
     }
   };
 
@@ -290,7 +297,7 @@ export default function MapScreen() {
       }
       Alert.alert(t("Erreur"), decisionSaved
         ? t('La décision est enregistrée, mais le rafraîchissement a échoué. Rouvrez la liste pour réessayer.')
-        : errorMessage(e, 'Action impossible.'));
+        : errorMessage(e, "Impossible de traiter cette demande. Actualisez la liste et réessayez."));
     } finally {
       processingRequest.current = false;
       setIsProcessingRequest(false);
@@ -311,7 +318,7 @@ export default function MapScreen() {
               await unvisitPlace(API_BASE_URL, place.id);
               removeVisitedPlace(place.id);
             } catch (e: any) {
-              Alert.alert(t("Erreur"), errorMessage(e, "Impossible de retirer la visite."));
+              Alert.alert(t("Erreur"), errorMessage(e, "Impossible de retirer cette visite. Réessayez depuis la fiche du lieu."));
             }
           },
         },
@@ -326,7 +333,7 @@ export default function MapScreen() {
         addVisitedPlace(place.id);
         Alert.alert(t("Santé !"), t("{name} a été ajouté à votre passeport.", { name: place.name }));
       } catch (e: any) {
-        Alert.alert(t("Erreur"), errorMessage(e, "Impossible d'ajouter la visite. Assurez-vous d'être assez proche du lieu."));
+        Alert.alert(t("Erreur"), errorMessage(e, 'Impossible de confirmer la visite. Réessayez lorsque vous êtes sur place.'));
       }
     }
   };
@@ -344,7 +351,7 @@ export default function MapScreen() {
             await clearPlacesCache();
             Alert.alert(t("Succès"), t("Le café a été supprimé."));
           } catch (e: any) {
-            Alert.alert(t("Erreur"), errorMessage(e, "Impossible de supprimer le lieu."));
+            Alert.alert(t("Erreur"), errorMessage(e, "Impossible de supprimer ce lieu. Actualisez la carte et réessayez."));
           }
         },
       },
@@ -378,6 +385,12 @@ export default function MapScreen() {
       />
 
       <SafeAreaView style={styles.topContainer} pointerEvents="box-none">
+        {placesError != null && <View style={styles.loadError}>
+          <Text accessibilityRole="alert" style={styles.loadErrorText}>{errorMessage(placesError, 'Impossible de charger les lieux. Réessayez pour actualiser la carte.')}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setPlacesRetry(value => value + 1)} style={{ padding: 10 }}>
+            <Text style={{ color: '#994c00', fontWeight: 'bold' }}>{t('Réessayer')}</Text>
+          </TouchableOpacity>
+        </View>}
         <View style={styles.topControlsRow}>
           <View style={styles.searchBarContainer}>
             <TextInput style={styles.searchInput} placeholder={t("Ville...")} value={searchText} onChangeText={setSearchText} onSubmitEditing={handleSearchCity} placeholderTextColor={placeholderTextColor} />
@@ -422,7 +435,7 @@ export default function MapScreen() {
 
       <Animated.View style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}>
         {selectedPlace && (
-          <>
+          <ScrollView key={selectedPlace.id} style={styles.panelScroll}>
             {selectedPlace.imageUrl && <Image source={{ uri: selectedPlace.imageUrl }} style={styles.placeImage} resizeMode="cover" />}
             <View style={styles.panelHeader}>
               <View>
@@ -433,6 +446,12 @@ export default function MapScreen() {
               <TouchableOpacity onPress={() => setSelectedPlace(null)}><Ionicons name="close" size={24} color="#999" /></TouchableOpacity>
             </View>
             <Text style={styles.placeCity}>📍 {selectedPlace.city}</Text>
+            {selectedPlace.description?.trim() ? (
+              <View style={styles.placeRemarks}>
+                <Text style={styles.placeRemarksTitle}>{t('Remarques / commentaires')}</Text>
+                <Text style={styles.placeRemarksText}>{selectedPlace.description}</Text>
+              </View>
+            ) : null}
             <View style={styles.actionsContainer}>
               <TouchableOpacity style={styles.navigateBtn} onPress={() => handleNavigation(selectedPlace)}>
                 <Ionicons name="navigate" size={18} color="white" style={{marginRight: 5}} />
@@ -460,7 +479,7 @@ export default function MapScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          </>
+          </ScrollView>
         )}
       </Animated.View>
 
@@ -522,6 +541,9 @@ export default function MapScreen() {
             renderItem={({item}) => (
               <View style={styles.requestCard}>
                 <Text style={{fontWeight: 'bold', fontSize: 18}}>{item.name}</Text>
+                <Text style={styles.requestAuthor}>
+                  {t('Suggéré par : {username}', { username: item.requesterUsername?.trim() || t('Utilisateur inconnu') })}
+                </Text>
                 <Text>📍 {item.city}</Text>
                 <Text>Lat: {item.lat?.toFixed(4)}, Lng: {item.lng?.toFixed(4)}</Text>
                 <Text>{t("🍺 Prix Orval:")}{" "}{item.price != null ? new Intl.NumberFormat(language, { style: "currency", currency: "EUR" }).format(item.price) : "—"}</Text>
@@ -541,6 +563,8 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadError: { padding: 12, backgroundColor: '#fff4e5', borderRadius: 10, marginBottom: 8 },
+  loadErrorText: { color: '#663c00', fontSize: 14, lineHeight: 21 },
   container: { flex: 1, backgroundColor: "#fff" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   topContainer: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "column", paddingHorizontal: 10, paddingTop: Platform.OS === 'android' ? 10 : 5, zIndex: 10 },
@@ -551,7 +575,12 @@ const styles = StyleSheet.create({
   circleButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "white", justifyContent: "center", alignItems: "center", elevation: 3 },
   sideButtons: { position: 'absolute', right: 20, bottom: 100, zIndex: 10, alignItems: 'flex-end' },
   sideBtn: { backgroundColor: '#ff8c00', padding: 12, borderRadius: 25, marginBottom: 10, elevation: 5 },
-  panel: { position: "absolute", bottom: 0, width: "100%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, zIndex: 20 },
+  panel: { position: "absolute", bottom: 0, width: "100%", maxHeight: "80%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, zIndex: 20 },
+  panelScroll: { flexShrink: 1 },
+  requestAuthor: { fontSize: 14, color: '#555', marginTop: 4, marginBottom: 8 },
+  placeRemarks: { marginTop: 4, marginBottom: 8 },
+  placeRemarksTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 6 },
+  placeRemarksText: { fontSize: 14, lineHeight: 21, color: '#555' },
   panelHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   placeImage: { width: "100%", height: 150, borderRadius: 10, marginBottom: 15 },
   placeTitle: { fontSize: 22, fontWeight: "bold" },

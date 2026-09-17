@@ -42,7 +42,7 @@ export default function LoginScreen({ onSwitchToRegister, onForgotPassword }: { 
     try {
       await loginUser(API_BASE_URL, cleanUsername, password);
     } catch (e: any) {
-      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de se connecter"));
+      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de vous connecter pour le moment. Réessayez dans un instant."));
     } finally {
       setLoading(false);
     }

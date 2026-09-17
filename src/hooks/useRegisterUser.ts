@@ -1,3 +1,4 @@
+import { HttpError } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 
 export const useRegisterUser = () => {
@@ -18,10 +19,10 @@ export const useRegisterUser = () => {
 
         // Gestion personnalisée des codes d'erreur
         if (response.status === 400) {
-          if (errorData.message?.toLowerCase().includes("username")) {
+          if (typeof errorData.message === "string" && /username.*(taken|exists|used)|already.*username/i.test(errorData.message)) {
             return Promise.reject(new Error("Ce nom d'utilisateur est déjà pris."));
           }
-          if (errorData.message?.toLowerCase().includes("email")) {
+          if (typeof errorData.message === "string" && /email.*(taken|exists|used)|already.*email/i.test(errorData.message)) {
             return Promise.reject(new Error("Cette adresse email est déjà utilisée."));
           }
           return Promise.reject(new Error("Les données fournies sont invalides."));
@@ -31,7 +32,7 @@ export const useRegisterUser = () => {
           return Promise.reject(new Error("Cet utilisateur existe déjà."));
         }
 
-        return Promise.reject(new Error(errorData.message || "Une erreur est survenue lors de l'inscription."));
+        return Promise.reject(new HttpError(response.status));
       }
 
       const data = await response.json();
@@ -40,7 +41,7 @@ export const useRegisterUser = () => {
       }
       return data;
     } catch (e: any) {
-      if (e.message.includes("Network request failed")) {
+      if (e instanceof Error && e.message.includes("Network request failed")) {
         throw new Error("Impossible de joindre le serveur. Vérifiez votre connexion internet.");
       }
       throw e;

@@ -10,7 +10,7 @@ export default function LanguageSelector() {
   const select = async (next: Language) => {
     setSaving(true);
     try { await setLanguage(next); }
-    catch { Alert.alert(t('Erreur'), t('Veuillez réessayer plus tard.')); }
+    catch { Alert.alert(t('Langue'), t('Impossible de mémoriser la langue. Réessayez dans un instant.')); }
     finally { setSaving(false); }
   };
   return (

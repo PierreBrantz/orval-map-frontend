@@ -1,3 +1,4 @@
+import { HttpError } from "./errors";
 // src/api/passport.ts
 import { authenticatedFetch } from './api';
 import { Place } from "../types/Place";
@@ -32,7 +33,7 @@ export interface VisitedPlacesData {
 export async function fetchPassportData(baseUrl: string): Promise<PassportData> {
   const res = await authenticatedFetch('/api/users/me/passport');
   if (!res.ok) {
-    throw new Error("Impossible de récupérer les données du passeport.");
+    throw new HttpError(res.status);
   }
   return res.json();
 }
@@ -40,7 +41,7 @@ export async function fetchPassportData(baseUrl: string): Promise<PassportData> 
 export async function fetchVisitedPlaces(baseUrl: string): Promise<VisitedPlacesData> {
   const res = await authenticatedFetch('/api/users/me/visits');
   if (!res.ok) {
-    throw new Error("Impossible de récupérer la liste des lieux visités.");
+    throw new HttpError(res.status);
   }
   return res.json();
 }

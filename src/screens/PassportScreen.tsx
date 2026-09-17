@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 
 export default function PassportScreen() {
-  const { t, translateText } = useLanguage();
+  const { t, translateText, errorMessage } = useLanguage();
   const badgeRules = [
     { title: t("Badges de Découverte"), description: t("Basés sur le nombre de lieux différents visités.") },
     { name: t("Première découverte"), condition: t("1 lieu visité") },
@@ -23,17 +23,19 @@ export default function PassportScreen() {
     { name: t("Éclaireur"), condition: t("1 suggestion validée") },
     { name: t("Cartographe"), condition: t("5 suggestions validées") },
   ];
-  const { isGuest, showLogin, user, passportRevision } = useAuth();
+  const { isGuest, showLogin, user, passportRevision, refreshPassport } = useAuth();
   const [loading, setLoading] = useState(true);
   const [passportData, setPassportData] = useState<PassportData | null>(null);
   const [visitedPlaces, setVisitedPlaces] = useState<VisitedPlacesData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [isRulesModalVisible, setIsRulesModalVisible] = useState(false);
+  const [visitsError, setVisitsError] = useState<unknown>(null);
 
   useEffect(() => {
     let active = true;
     setPassportData(null);
     setVisitedPlaces(null);
+    setVisitsError(null);
     if (!isGuest) {
       const loadData = async () => {
         setLoading(true);
@@ -42,14 +44,14 @@ export default function PassportScreen() {
           const passport = await fetchPassportData(API_BASE_URL);
           if (active) setPassportData(passport);
         } catch (e) {
-          if (active) setError("Impossible de charger les données du passeport.");
+          if (active) setError(e);
         }
 
         try {
           const visits = await fetchVisitedPlaces(API_BASE_URL);
           if (active) setVisitedPlaces(visits);
         } catch (e) {
-          // Ne pas bloquer l'affichage si seulement cet appel échoue
+          if (active) setVisitsError(e);
         }
 
         if (active) setLoading(false);
@@ -86,7 +88,10 @@ export default function PassportScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Text>{(error && translateText(error)) || t("Impossible de charger les données.")}</Text>
+          <Text accessibilityRole="alert" style={styles.loginPrompt}>{errorMessage(error, "Impossible de charger votre passeport. Appuyez sur Réessayer pour le recharger.")}</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.loginButton} onPress={refreshPassport}>
+            <Text style={styles.loginButtonText}>{t('Réessayer')}</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -147,6 +152,12 @@ export default function PassportScreen() {
           </View>
         </View>
 
+        {visitsError != null && <View style={styles.section}>
+          <Text accessibilityRole="alert" style={styles.loginPrompt}>{errorMessage(visitsError, 'Impossible de charger vos visites. Réessayez pour afficher la liste.')}</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.loginButton} onPress={refreshPassport}>
+            <Text style={styles.loginButtonText}>{t('Réessayer')}</Text>
+          </TouchableOpacity>
+        </View>}
         {visitedPlaces && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t("Mes Découvertes ({count})", { count: visitedPlaces.count })}</Text>

@@ -27,6 +27,7 @@ function setup(pages, cached) {
   const exports = {};
   new Function('require', 'exports', compiled)(name => {
     if (name === './api') return api;
+    if (name === './errors') return require('./helpers/errors.cjs');
     if (name === '@react-native-async-storage/async-storage') return storage;
     throw new Error(`Unexpected import ${name}`);
   }, exports);
@@ -75,5 +76,26 @@ test('moderation conflicts are distinguished from generic server failures', asyn
   const conflict = setup([{ status: 409 }]);
   await assert.rejects(conflict.validatePlaceRequest('', 12, false), { message: 'Cette suggestion a déjà été traitée.' });
   const failure = setup([{ status: 500 }]);
-  await assert.rejects(failure.validatePlaceRequest('', 12, true), /Erreur validation: 500/);
+  await assert.rejects(failure.validatePlaceRequest('', 12, true), error => error.status === 500);
+});
+
+test('suggestion duplicates preserve the backend message and metadata without changing the submitted form', async () => {
+  const { DuplicateSuggestionError, getErrorMessage } = require('./helpers/errors.cjs');
+  for (const duplicateType of ['PLACE', 'PLACE_REQUEST']) {
+    const message = duplicateType === 'PLACE'
+      ? 'Ce bar existe déjà sur la carte : « Le Porthuis ».'
+      : 'Une suggestion pour ce bar est déjà en attente de validation.';
+    const client = setup([{ status: 409, error: message, duplicateType, duplicateId: 42 }]);
+    const form = { name: 'Le Porthuis', city: 'Bruxelles', lat: 50.85, lng: 4.35, price: 5.5, imageUrl: 'file://photo.jpg', placeType: 'BAR' };
+    const original = { ...form };
+    await assert.rejects(client.suggestPlace('', form), error => {
+      assert.ok(error instanceof DuplicateSuggestionError);
+      assert.equal(error.duplicateType, duplicateType);
+      assert.equal(error.duplicateId, 42);
+      assert.equal(getErrorMessage('en', error, 'Erreur'), message);
+      return true;
+    });
+    assert.deepEqual(form, original);
+    assert.deepEqual(client.requests, ['/api/place-requests']);
+  }
 });

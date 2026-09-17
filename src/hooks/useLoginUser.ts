@@ -1,3 +1,4 @@
+import { HttpError } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 
 export const useLoginUser = () => {
@@ -17,9 +18,7 @@ export const useLoginUser = () => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      // Try to extract a more specific error message from the backend
-      throw new Error(errorData.message || errorData.error || `Identifiants invalides ou jeton manquant`);
+      throw new HttpError(response.status, [400, 401, 403].includes(response.status) ? "Identifiant ou mot de passe incorrect. Vérifiez vos informations et réessayez." : "");
     }
 
     const data = await response.json();

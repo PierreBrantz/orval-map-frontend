@@ -1,3 +1,4 @@
+import { HttpError } from "./errors";
 // src/api/auth.ts
 
 import { authenticatedFetch } from "./api";
@@ -31,8 +32,9 @@ export async function requestPasswordReset(baseUrl: string, email: string): Prom
   });
 
   if (!response.ok) {
-    // console.error("Password reset request failed with status:", response.status);
-    throw new Error("Une erreur est survenue lors de la demande de réinitialisation.");
+    // Keep the same neutral confirmation if the server reports an unknown account.
+    if (response.status === 404) return;
+    throw new HttpError(response.status);
   }
 }
 
@@ -48,8 +50,6 @@ export async function resetPassword(baseUrl: string, token: string, newPassword:
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    // console.error("Password reset failed with status:", response.status, errorData);
-    throw new Error(errorData.message || errorData.error || "Impossible de réinitialiser le mot de passe. Le lien est peut-être invalide ou expiré.");
+    throw new HttpError(response.status, [400, 404, 410].includes(response.status) ? "Ce lien est invalide ou expiré. Demandez un nouveau lien de réinitialisation." : "");
   }
 }

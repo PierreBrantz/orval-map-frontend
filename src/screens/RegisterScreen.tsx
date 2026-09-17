@@ -57,14 +57,18 @@ export default function RegisterScreen({ onSwitchToLogin }: { onSwitchToLogin: (
       await registerUser(API_BASE_URL, { username: cleanUsername, email: cleanEmail, password });
       Alert.alert(t("Bienvenue !"), t("Votre compte a été créé avec succès."));
     } catch (e: any) {
-      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de créer le compte"));
+      Alert.alert(t("Erreur"), errorMessage(e, "Impossible de créer votre compte. Vérifiez les champs et réessayez."));
     } finally {
       setLoading(false);
     }
   };
 
-  const openTerms = () => Linking.openURL(TERMS_OF_USE_URL);
-  const openPrivacy = () => Linking.openURL(PRIVACY_POLICY_URL);
+  const openLegalLink = async (url: string) => {
+    try { await Linking.openURL(url); }
+    catch { Alert.alert(t('Erreur'), t("Impossible d’ouvrir ce lien. Vérifiez qu’un navigateur est installé et réessayez.")); }
+  };
+  const openTerms = () => openLegalLink(TERMS_OF_USE_URL);
+  const openPrivacy = () => openLegalLink(PRIVACY_POLICY_URL);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>

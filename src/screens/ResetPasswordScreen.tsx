@@ -49,7 +49,7 @@ export default function ResetPasswordScreen({ token, onPasswordResetSuccess }: {
       }, 3000); // 3 seconds delay
     } catch (error: any) {
       console.error("Password Reset Error:", error);
-      setError(errorMessage(error, "Une erreur est survenue."));
+      setError(errorMessage(error, 'Impossible de réinitialiser votre mot de passe. Réessayez ou demandez un nouveau lien.'));
     } finally {
       setLoading(false);
     }
@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: "#ccc", shadowOpacity: 0 },
   buttonText: { color: "white", fontWeight: "bold", fontSize: 18 },
   errorText: {
+    lineHeight: 21,
     color: 'red',
     textAlign: 'center',
     marginBottom: 15,

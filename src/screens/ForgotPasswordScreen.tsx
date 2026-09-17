@@ -18,7 +18,7 @@ import { API_BASE_URL } from "../config";
 import { requestPasswordReset } from "../api/auth";
 
 export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
-  const { t } = useLanguage();
+  const { t, errorMessage } = useLanguage();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,12 +42,10 @@ export default function ForgotPasswordScreen({ onSwitchToLogin }: { onSwitchToLo
       );
       onSwitchToLogin();
     } catch (error: any) {
-      console.error("Password Reset Error:", error);
       Alert.alert(
-        t("Vérifiez vos e-mails"),
-        t("Si un compte est associé à cette adresse, un e-mail de réinitialisation a été envoyé.")
+        t("Erreur"),
+        errorMessage(error, 'Impossible de demander le lien de réinitialisation. Réessayez dans un instant.')
       );
-      onSwitchToLogin();
     } finally {
       setLoading(false);
     }

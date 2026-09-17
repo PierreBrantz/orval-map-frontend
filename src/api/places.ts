@@ -1,3 +1,4 @@
+import { DuplicateSuggestionError, HttpError } from "./errors";
 // src/api/places.ts
 import { authenticatedFetch, authenticatedFetchMultipart } from './api';
 import { Place, PlaceRequest } from "../types/Place";
@@ -37,7 +38,7 @@ export async function fetchPlaces(baseUrl: string, placeType: 'BAR' | 'RESTAURAN
     let endpoint = `/api/places?page=${page}&size=${PAGE_SIZE}&sort=id,asc`;
     if (placeType) endpoint += `&placeType=${placeType}`;
     const res = await authenticatedFetch(endpoint);
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    if (!res.ok) throw new HttpError(res.status);
     const response: PagedResponse<Place> = await res.json();
     if (!Array.isArray(response.content)) throw new Error('Invalid places response');
     if (response.content.length === 0) break;
@@ -68,7 +69,7 @@ export async function visitPlace(baseUrl: string, placeId: number, coords: { lat
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || "Une erreur est survenue lors de la visite.");
+    throw new HttpError(res.status, typeof errorData.error === "string" ? errorData.error : "");
   }
   return res.json();
 }
@@ -78,8 +79,7 @@ export async function unvisitPlace(baseUrl: string, placeId: number): Promise<vo
     method: "DELETE",
   });
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Erreur de suppression de visite: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status);
   }
 }
 
@@ -93,8 +93,7 @@ export async function uploadPlaceImage(baseUrl: string, placeId: number, localUr
   const res = await authenticatedFetchMultipart(`/api/places/${placeId}/upload-image`, { method: 'POST', body: formData });
 
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Upload Error: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status, "Impossible d’envoyer la photo. Choisissez une autre image ou réessayez.");
   }
   const responseData = await res.json();
   return responseData.url;
@@ -110,8 +109,7 @@ export async function uploadRequestImage(baseUrl: string, localUri: string): Pro
   const res = await authenticatedFetchMultipart('/api/place-requests/upload-image', { method: 'POST', body: formData });
 
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Upload Request Image Error: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status, "Impossible d’envoyer la photo. Choisissez une autre image ou réessayez.");
   }
   const responseData = await res.json();
   return responseData.url;
@@ -123,8 +121,10 @@ export async function suggestPlace(baseUrl: string, request: Omit<PlaceRequest, 
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Erreur suggestion: ${res.status} - ${errorBody}`);
+    if (res.status === 409) {
+      throw new DuplicateSuggestionError(await res.json().catch(() => null));
+    }
+    throw new HttpError(res.status);
   }
   return res.json();
 }
@@ -132,8 +132,7 @@ export async function suggestPlace(baseUrl: string, request: Omit<PlaceRequest, 
 export async function fetchPlaceRequests(baseUrl: string): Promise<PlaceRequest[]> {
   const res = await authenticatedFetch('/api/place-requests/pending');
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Erreur admin: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status);
   }
   return res.json();
 }
@@ -144,8 +143,7 @@ export async function validatePlaceRequest(baseUrl: string, id: number, approve:
   });
   if (!res.ok) {
     if (res.status === 409) throw new Error('Cette suggestion a déjà été traitée.');
-    const errorBody = await res.text();
-    throw new Error(`Erreur validation: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status);
   }
 }
 
@@ -155,8 +153,7 @@ export async function updatePlace(baseUrl: string, place: Place): Promise<Place>
     body: JSON.stringify(place),
   });
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Update Error: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status);
   }
   return res.json();
 }
@@ -166,8 +163,7 @@ export async function deletePlace(baseUrl: string, placeId: number): Promise<voi
     method: "DELETE",
   });
   if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Delete Error: ${res.status} - ${errorBody}`);
+    throw new HttpError(res.status);
   }
 }
 

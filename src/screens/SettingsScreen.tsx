@@ -82,22 +82,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSupport = () => {
-    const supportUrl = 'https://buymeacoffee.com/orvalmaps';
-    Linking.canOpenURL(supportUrl).then(supported => {
-      if (supported) {
-        Linking.openURL(supportUrl);
-      } else {
-        Alert.alert(t("Erreur"), t("Impossible d'ouvrir le lien."));
-      }
-    });
-  };
+  const handleSupport = () => openExternalUrl('https://buymeacoffee.com/orvalmaps');
 
   const openExternalUrl = async (url: string) => {
     try {
       await Linking.openURL(url);
     } catch {
-      Alert.alert(t("Erreur"), t("Impossible d'ouvrir ce lien."));
+      Alert.alert(t("Erreur"), t("Impossible d’ouvrir ce lien. Vérifiez qu’un navigateur est installé et réessayez."));
     }
   };
 

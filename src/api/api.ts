@@ -1,6 +1,7 @@
 // src/api/api.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
+import { HttpError } from './errors';
 
 let onUnauthorized: (() => void | Promise<void>) | null = null;
 
@@ -27,6 +28,7 @@ export async function authenticatedFetch(endpoint: string, options: RequestInit 
     throw new Error('SESSION_EXPIRED');
   }
 
+  if (response.status === 429 || response.status >= 500 || response.status === 408) throw new HttpError(response.status);
   return response;
 }
 
@@ -48,5 +50,6 @@ export async function authenticatedFetchMultipart(endpoint: string, options: Req
     throw new Error('SESSION_EXPIRED');
   }
 
+  if (response.status === 429 || response.status >= 500 || response.status === 408) throw new HttpError(response.status);
   return response;
 }
