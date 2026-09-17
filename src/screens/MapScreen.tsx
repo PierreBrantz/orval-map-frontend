@@ -47,6 +47,7 @@ export default function MapScreen() {
 
   const [editingPlace, setEditingPlace] = useState<Partial<Place>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
   const [displayPriceString, setDisplayPriceString] = useState<string>("");
 
   const [searchText, setSearchText] = useState("");
@@ -81,6 +82,7 @@ export default function MapScreen() {
   };
 
   useEffect(() => {
+    if (!isModalVisible) setPendingImageUri(null);
     if (isModalVisible) {
       setDisplayPriceString(editingPlace.price !== undefined ? String(editingPlace.price).replace('.', ',') : "");
     }
@@ -209,11 +211,10 @@ export default function MapScreen() {
       if (status !== 'granted') return Alert.alert(t("Photo du lieu"), t('Autorisez l’accès aux photos dans les paramètres de votre appareil, puis réessayez.'));
       let result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: 0.7
       });
-      if (!result.canceled) setEditingPlace(p => ({ ...p, imageUrl: result.assets[0].uri }));
+      if (!result.canceled) setPendingImageUri(result.assets[0].uri);
     } catch (error) {
       Alert.alert(t('Photo du lieu'), errorMessage(error, 'Impossible d’ouvrir vos photos. Réessayez depuis le formulaire.'));
     }
@@ -231,6 +232,7 @@ export default function MapScreen() {
   };
 
   const handleSavePlace = async () => {
+    if (pendingImageUri || isUploading) return;
     try {
       setIsUploading(true);
       let finalImageUrl = editingPlace.imageUrl;
@@ -492,7 +494,18 @@ export default function MapScreen() {
             <ScrollView contentContainerStyle={styles.modalScrollViewContent}>
               <Text style={styles.modalTitle}>{editingPlace.id ? t("Modifier le lieu") : t("Suggérer un lieu")}</Text>
               {!editingPlace.id && <Text style={styles.locationInfoText}>{t("Votre position actuelle sera automatiquement utilisée. Veuillez être dans le lieu.")}</Text>}
-              {editingPlace.imageUrl && <Image source={{ uri: editingPlace.imageUrl }} style={styles.previewImage} />}
+              {(pendingImageUri || editingPlace.imageUrl) && <Image source={{ uri: pendingImageUri || editingPlace.imageUrl }} style={styles.previewImage} resizeMode="contain" />}
+              {pendingImageUri && <View style={styles.photoConfirmation}>
+                <TouchableOpacity accessibilityRole="button" style={styles.saveButton} onPress={() => {
+                  setEditingPlace(place => ({ ...place, imageUrl: pendingImageUri }));
+                  setPendingImageUri(null);
+                }}>
+                  <Text style={styles.saveButtonText}>{t('Valider la photo')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity accessibilityRole="button" style={styles.cancelButton} onPress={() => setPendingImageUri(null)}>
+                  <Text style={styles.cancelButtonText}>{t('Annuler')}</Text>
+                </TouchableOpacity>
+              </View>}
               <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
                 <Ionicons name="camera" size={20} color="#666" style={{marginRight: 8}} />
                 <Text>{t("Photo du lieu")}</Text>
@@ -519,7 +532,7 @@ export default function MapScreen() {
               <Text style={styles.contentDisclaimerText}>{t("OrvalMaps peut supprimer tout contenu inapproprié.")}</Text>
             </ScrollView>
             <View style={styles.modalFixedButtonsContainer}>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSavePlace} disabled={isUploading}>
+              <TouchableOpacity style={[styles.saveButton, pendingImageUri ? { opacity: 0.5 } : null]} onPress={handleSavePlace} disabled={isUploading || !!pendingImageUri}>
                 {isUploading ? <ActivityIndicator color="white" /> : <Text style={styles.saveButtonText}>{t("Envoyer")}</Text>}
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelButton} onPress={() => setIsModalVisible(false)}><Text style={styles.cancelButtonText}>{t("Annuler")}</Text></TouchableOpacity>
@@ -577,6 +590,7 @@ const styles = StyleSheet.create({
   sideBtn: { backgroundColor: '#ff8c00', padding: 12, borderRadius: 25, marginBottom: 10, elevation: 5 },
   panel: { position: "absolute", bottom: 0, width: "100%", maxHeight: "80%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, zIndex: 20 },
   panelScroll: { flexShrink: 1 },
+  photoConfirmation: { marginBottom: 15 },
   requestAuthor: { fontSize: 14, color: '#555', marginTop: 4, marginBottom: 8 },
   placeRemarks: { marginTop: 4, marginBottom: 8 },
   placeRemarksTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 6 },

@@ -1,6 +1,7 @@
 // Each entry contains English, Dutch, Italian and German, in that order.
 // French source strings are also the stable lookup keys and fallback language.
 export const translations = {
+  "Valider la photo": ["Confirm photo", "Foto bevestigen", "Conferma foto", "Foto bestätigen"],
   "Ce bar existe déjà ou fait déjà l’objet d’une suggestion.": ["This bar already exists or has already been suggested.", "Dit café bestaat al of is al voorgesteld.", "Questo bar esiste già o è già stato suggerito.", "Diese Bar existiert bereits oder wurde bereits vorgeschlagen."],
   "Impossible de réinitialiser votre mot de passe. Réessayez ou demandez un nouveau lien.": ["Unable to reset your password. Try again or request a new link.", "Je wachtwoord opnieuw instellen mislukt. Probeer opnieuw of vraag een nieuwe link aan.", "Impossibile reimpostare la password. Riprova o richiedi un nuovo link.", "Dein Passwort konnte nicht zurückgesetzt werden. Versuche es erneut oder fordere einen neuen Link an."],
   "Impossible de charger vos visites. Réessayez pour afficher la liste.": ["Unable to load your visits. Try again to display the list.", "Je bezoeken laden mislukt. Probeer opnieuw om de lijst te zien.", "Impossibile caricare le visite. Riprova per visualizzare l'elenco.", "Deine Besuche konnten nicht geladen werden. Versuche es erneut, um die Liste anzuzeigen."],
