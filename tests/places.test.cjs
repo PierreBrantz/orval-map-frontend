@@ -79,6 +79,29 @@ test('moderation conflicts are distinguished from generic server failures', asyn
   await assert.rejects(failure.validatePlaceRequest('', 12, true), error => error.status === 500);
 });
 
+test('approval and rejection use separate POST endpoints', async () => {
+  const exports = {};
+  const requests = [];
+  new Function('require', 'exports', compiled)(name => {
+    if (name === './errors') return require('./helpers/errors.cjs');
+    if (name === '@react-native-async-storage/async-storage') return {};
+    if (name === './api') return {
+      authenticatedFetch: async (endpoint, options) => {
+        requests.push({ endpoint, method: options.method });
+        // A successful rejection returns 204 with no body.
+        return { ok: true, status: 204 };
+      },
+    };
+    throw new Error(`Unexpected import ${name}`);
+  }, exports);
+  await exports.validatePlaceRequest('', 17, false);
+  await exports.validatePlaceRequest('', 42, true);
+  assert.deepEqual(requests, [
+    { endpoint: '/api/place-requests/17/reject', method: 'POST' },
+    { endpoint: '/api/place-requests/42/validate', method: 'POST' },
+  ]);
+});
+
 test('suggestion duplicates preserve the backend message and metadata without changing the submitted form', async () => {
   const { DuplicateSuggestionError, getErrorMessage } = require('./helpers/errors.cjs');
   for (const duplicateType of ['PLACE', 'PLACE_REQUEST']) {

@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, P
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
 import { deleteCurrentAccount } from '../api/auth';
 import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../config';
@@ -168,7 +169,7 @@ export default function SettingsScreen() {
             <Ionicons name="document-text-outline" size={24} color="#ff8c00" />
             <Text style={styles.optionButtonText}>{t("Conditions d'utilisation")}</Text>
           </TouchableOpacity>
-          <Text style={[styles.infoText, styles.infoTextFirst]}>{t("Version de l'application :")}{" "}{Application.nativeApplicationVersion ?? '1.0.0'}</Text>
+          <Text style={[styles.infoText, styles.infoTextFirst]}>{t("Version de l'application :")}{" "}{Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '—'}</Text>
           <Text style={styles.infoText}>{t("Développé par Pierre Brantz")}</Text>
         </View>
 

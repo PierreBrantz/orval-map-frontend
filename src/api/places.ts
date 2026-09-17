@@ -138,7 +138,8 @@ export async function fetchPlaceRequests(baseUrl: string): Promise<PlaceRequest[
 }
 
 export async function validatePlaceRequest(baseUrl: string, id: number, approve: boolean): Promise<void> {
-  const res = await authenticatedFetch(`/api/place-requests/${id}/validate?approve=${approve}`, {
+  const action = approve ? 'validate' : 'reject';
+  const res = await authenticatedFetch(`/api/place-requests/${id}/${action}`, {
     method: "POST",
   });
   if (!res.ok) {
